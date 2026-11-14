@@ -8,8 +8,7 @@ test('index.html inlines kernel.mjs byte-for-byte', () => {
   const kernel = readFileSync(new URL('./kernel.mjs', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
   const page = readFileSync(new URL('./index.html', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
   const start = kernel.indexOf('const arr =');
-  const endMark = 'export default { tokens, idf, score, route, top1 };';
-  const body = kernel.slice(start, kernel.indexOf(endMark)).replace(/export function/g, 'function').trimEnd();
+  const body = kernel.slice(start, kernel.indexOf('export default')).replace(/export function/g, 'function').trimEnd();
   assert.ok(body.length > 1500, 'kernel body extracted');
   assert.ok(page.includes(body), 'the exact kernel.mjs source (minus export) must appear verbatim in index.html');
 });
