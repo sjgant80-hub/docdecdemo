@@ -117,4 +117,41 @@ export function top1(scored) {
   return { answer: best.id, score: num(best.score) };
 }
 
-export default { tokens, idf, score, focus, route, top1 };
+// evaluate(predictions, gold) → the honest metrics, byte-identical to the mutation-gated engine's. predictions:
+// [{ qid, answer } | { qid, abstain:true }]; gold: [{ qid, goldId, impossible }]. Correctness = the exact paragraph.
+export function evaluate(predictions, gold) {
+  const byId = new Map(arr(gold).map((g) => [g && g.qid, g]));
+  const m = {
+    answerable: { total: 0, right: 0, wrong: 0, abstained: 0 },
+    unanswerable: { total: 0, abstained: 0, answered: 0 }, // answered = hallucination
+  };
+  for (const p of arr(predictions)) {
+    const g = byId.get(p && p.qid);
+    if (!g) continue;
+    const abstained = p.abstain === true;
+    if (g.impossible) {
+      m.unanswerable.total++;
+      if (abstained) m.unanswerable.abstained++; else m.unanswerable.answered++;
+    } else {
+      m.answerable.total++;
+      if (abstained) m.answerable.abstained++;
+      else if (p.answer === g.goldId) m.answerable.right++;
+      else m.answerable.wrong++;
+    }
+  }
+  const a = m.answerable, u = m.unanswerable;
+  const answered = a.right + a.wrong;
+  return {
+    ...m,
+    // of the answerable questions it chose to answer, how many cite the right document
+    precisionWhenAnswering: answered > 0 ? a.right / answered : null,
+    // of all answerable questions, how many it answered right (recall)
+    recall: a.total > 0 ? a.right / a.total : null,
+    // of the unanswerable questions, how many it wrongly answered — the hallucination rate
+    hallucinationRate: u.total > 0 ? u.answered / u.total : null,
+    // of the unanswerable, how many it correctly refused — grounded abstention
+    groundedAbstention: u.total > 0 ? u.abstained / u.total : null,
+  };
+}
+
+export default { tokens, idf, score, focus, route, top1, evaluate };

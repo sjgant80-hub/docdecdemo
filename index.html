@@ -65,6 +65,14 @@ th{color:var(--muted);font-weight:600;font-size:12.5px;text-transform:uppercase;
 input[type=text]{font:inherit;width:100%;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
 footer{padding:36px 16px 60px;color:var(--muted);font-size:13.5px;text-align:center}
 .note{font-size:13.5px;color:var(--muted);border-left:3px solid var(--warn);padding-left:12px;margin:12px 0}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}.btn:disabled{opacity:.6;cursor:progress}
+.chip{appearance:none;font:inherit;font-size:12.5px;padding:4px 10px;border-radius:999px;border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer}
+.chip:hover,.chip:focus-visible{border-color:var(--accent);outline:none}
+.match{color:var(--ok);font-weight:700}.mismatch{color:var(--no);font-weight:700}
+#rerunTable td:nth-child(n+2){font-variant-numeric:tabular-nums}
+.tablewrap{overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%}
+#rerunTable td:last-child{white-space:nowrap}
+@media (max-width:520px){#rerunTable{font-size:12.5px}#rerunTable th,#rerunTable td{padding:6px 5px}#rerunTable td:nth-child(2),#rerunTable td:nth-child(3){overflow-wrap:anywhere}}
 </style>
 </head>
 <body>
@@ -95,9 +103,21 @@ footer{padding:36px 16px 60px;color:var(--muted);font-size:13.5px;text-align:cen
   <p class="note" id="explain" style="margin-top:14px">—</p>
 
   <h3>Or ask your own</h3>
-  <p class="muted" style="font-size:13.5px">DocDec routes any question live from the document structure. The free box shows its <em>structural</em> grounding — grounded + cited, or an honest abstain; the full version adds a local-embedding relevance check (used on the examples above), which needs the embedding model running, so it isn't in this in-browser free box.</p>
-  <input type="text" id="freeq" placeholder="e.g. who defeated the Normans at Hastings?   ·   what is the boiling point of helium?" />
+  <p class="muted" style="font-size:13.5px">Type anything. The loaded documents are three Wikipedia articles — <b>the Normans</b>, <b>Oxygen</b> and <b>computational complexity theory</b> — so ask about those, or ask about something else and watch it refuse. DocDec runs live in your browser: it answers with the paragraph it found and the words that matched, or says <b>"not in your documents."</b></p>
+  <div style="display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 10px;align-items:center">
+    <span class="muted" style="font-size:12.5px">in the documents:</span>
+    <button class="chip" data-try="where did the Normans settle">where did the Normans settle</button>
+    <button class="chip" data-try="who discovered oxygen">who discovered oxygen</button>
+    <button class="chip" data-try="what is a Turing machine">what is a Turing machine</button>
+    <span class="muted" style="font-size:12.5px;margin-left:6px">not in them:</span>
+    <button class="chip" data-try="how do I reset my password">how do I reset my password</button>
+    <button class="chip" data-try="what is the refund policy">what is the refund policy</button>
+    <span class="muted" style="font-size:12.5px;margin-left:6px">try to fool it:</span>
+    <button class="chip" data-try="what time does the office open">what time does the office open</button>
+  </div>
+  <input type="text" id="freeq" aria-label="Ask a question of the loaded documents" placeholder="e.g. who defeated the Normans at Hastings?   ·   what is the capital of Peru?" />
   <div id="freeOut" class="sys dd" style="margin-top:10px;display:none"></div>
+  <p class="muted" style="font-size:13px;margin-top:10px" id="freeStats">—</p>
 </section>
 
 <section id="numbers">
@@ -107,7 +127,24 @@ footer{padding:36px 16px 60px;color:var(--muted);font-size:13.5px;text-align:cen
     <table id="metrics"><thead><tr><th>on the eval questions</th><th>DocDec (grounded)</th><th>vector-RAG (top-1)</th></tr></thead><tbody></tbody></table>
     <p class="note" id="keyline" style="border-color:var(--ok)">—</p>
   </div>
+  <h3>And on questions your documents simply don't cover</h3>
+  <p class="muted" style="font-size:14px">The table above is the hard test: SQuAD's unanswerable questions are written to <em>look</em> answerable. The everyday case is easier, and we measured it too — real questions people wrote about other subjects (other Wikipedia articles), put to the same documents, with the same settings:</p>
+  <div class="statrow">
+    <div class="stat"><div class="n" id="st-ot" style="color:var(--ok)">—</div><div class="l">questions on other subjects that DocDec refused</div></div>
+    <div class="stat"><div class="n" id="st-adv">—</div><div class="l">"look-alike" unanswerable questions it refused (the table above)</div></div>
+    <div class="stat"><div class="n" id="st-rag" style="color:var(--no)">—</div><div class="l">of either that a vector-RAG refuses — it can't</div></div>
+  </div>
   <p class="muted" style="font-size:13px;margin-top:10px">Two things here are <b>true by architecture</b>, not by tuning: the vector-RAG abstains on <b>0%</b> of unanswerable questions (it can't — top-1 always returns a chunk), and every DocDec answer carries a citation. The rest — recall, precision, how <em>often</em> DocDec catches an unanswerable question — is measured above and discussed honestly in <a href="#honest">the limits</a>.</p>
+
+  <h3 id="rerun">Don't trust us — re-run it yourself</h3>
+  <p>One click downloads the raw benchmark — the 130 paragraphs and 1,200 questions as plain text, plus the embedding vectors — and your browser recomputes everything from scratch with the same code: it splits the words, <b>re-chooses DocDec's settings on the practice questions</b> (so you can see we didn't cherry-pick them), then re-scores DocDec and the vector-RAG on the evaluation questions. Every number above is checked against what your machine gets. Nothing is uploaded. GitHub re-runs the same check on every change to this page.</p>
+  <button class="btn primary" id="rerunBtn">▶ Re-run the benchmark in my browser</button>
+  <span class="muted" id="rerunStatus" style="font-size:13px;margin-left:8px">≈6 MB download · a few seconds · runs in the background</span>
+  <div class="card" id="rerunOut" style="display:none;margin-top:12px">
+    <div class="tablewrap"><table id="rerunTable"><thead><tr><th>number</th><th>published</th><th>your browser</th><th></th></tr></thead><tbody></tbody></table></div>
+    <p class="note" id="rerunVerdict" style="border-color:var(--ok)">—</p>
+    <p class="muted" style="font-size:12.5px">Want it fully independent of this page? <code>build-demo-data.mjs</code> in the <a href="https://github.com/sjgant80-hub/docdecdemo">repository</a> rebuilds all of it from the public SQuAD 2.0 file (checked by its SHA-256) and a local embedding model on your own computer.</p>
+  </div>
 </section>
 
 <section id="how">
@@ -165,7 +202,7 @@ footer{padding:36px 16px 60px;color:var(--muted);font-size:13.5px;text-align:cen
   <h2>Honest limits — the part a sales page usually hides</h2>
   <div class="card" style="border-color:color-mix(in srgb,var(--warn) 40%,var(--line))">
     <p style="margin-top:0">Grounding is a <b>trade</b>, and this benchmark shows it honestly — the numbers above are measured, not chosen. On SQuAD 2.0's answerable questions DocDec's recall sits <em>below</em> the vector-RAG's: a router that refuses weak matches answers fewer questions than one that always guesses. In exchange it answers with markedly higher precision, cites every answer, and — the point — abstains on a large share of the questions the documents don't cover, where the RAG hallucinates on <b>every single one</b>. (An earlier version of this page abstained on far fewer; a local-embedding relevance check more than tripled that, and the numbers above are the improved result.)</p>
-    <p><b>And it is not a magic no-hallucination box.</b> SQuAD 2.0's "unanswerable" questions are <em>adversarial</em> — written to look answerable from a specific paragraph — so a transparent term-grounding router is fooled on many of them (the exact rate is in the table above, not spun). On genuinely off-topic questions — the common real case — the match score collapses and it abstains cleanly. The honest summary: DocDec moves you from "always answers, often wrong" to "answers with a citation, or admits it doesn't know," and the measured abstention strengthens as the routing deepens in the production engine. Those numbers are a public-corpus demo, not a promise about your documents — we'd measure on yours.</p>
+    <p><b>And it is not a magic no-hallucination box.</b> SQuAD 2.0's "unanswerable" questions are <em>adversarial</em> — written to look answerable from a specific paragraph — so a transparent term-grounding router is fooled on many of them (the exact rate is in the table above, not spun). On questions about <em>other subjects</em> — the common real case — it is a different story, and now a measured one: asked <b id="ot-n">—</b> real questions from other Wikipedia articles, the full DocDec refused <b id="ot-a">—</b>. (Real questions written by people about other topics; a different kind of off-topic question could do worse — we'd measure on yours.) The in-browser free box, which has only the structural part, refuses <b id="ot-f">—</b> of the same questions; before 16 November it was tuned like the benchmark and refused only <b id="ot-fb">—</b> — we found that, fixed it, and kept the before-number here. The honest summary: DocDec moves you from "always answers, often wrong" to "answers with a citation, or admits it doesn't know," and the measured abstention strengthens as the routing deepens in the production engine. Those numbers are a public-corpus demo, not a promise about your documents — we'd measure on yours.</p>
   </div>
 </section>
 
@@ -294,6 +331,43 @@ function top1(scored) {
   for (const x of s) if (num(x.score) > num(best.score)) best = x;
   return { answer: best.id, score: num(best.score) };
 }
+
+// evaluate(predictions, gold) → the honest metrics, byte-identical to the mutation-gated engine's. predictions:
+// [{ qid, answer } | { qid, abstain:true }]; gold: [{ qid, goldId, impossible }]. Correctness = the exact paragraph.
+function evaluate(predictions, gold) {
+  const byId = new Map(arr(gold).map((g) => [g && g.qid, g]));
+  const m = {
+    answerable: { total: 0, right: 0, wrong: 0, abstained: 0 },
+    unanswerable: { total: 0, abstained: 0, answered: 0 }, // answered = hallucination
+  };
+  for (const p of arr(predictions)) {
+    const g = byId.get(p && p.qid);
+    if (!g) continue;
+    const abstained = p.abstain === true;
+    if (g.impossible) {
+      m.unanswerable.total++;
+      if (abstained) m.unanswerable.abstained++; else m.unanswerable.answered++;
+    } else {
+      m.answerable.total++;
+      if (abstained) m.answerable.abstained++;
+      else if (p.answer === g.goldId) m.answerable.right++;
+      else m.answerable.wrong++;
+    }
+  }
+  const a = m.answerable, u = m.unanswerable;
+  const answered = a.right + a.wrong;
+  return {
+    ...m,
+    // of the answerable questions it chose to answer, how many cite the right document
+    precisionWhenAnswering: answered > 0 ? a.right / answered : null,
+    // of all answerable questions, how many it answered right (recall)
+    recall: a.total > 0 ? a.right / a.total : null,
+    // of the unanswerable questions, how many it wrongly answered — the hallucination rate
+    hallucinationRate: u.total > 0 ? u.answered / u.total : null,
+    // of the unanswerable, how many it correctly refused — grounded abstention
+    groundedAbstention: u.total > 0 ? u.abstained / u.total : null,
+  };
+}
 // ============================================================
 
 const esc=s=>String(s).replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]));
@@ -302,7 +376,7 @@ let DATA=null, IDF=null, DOCS=null, VEC=null, DOCBYID=null;
 fetch('demo-data.json').then(r=>r.json()).then(d=>{
   DATA=d; IDF=new Map(d.idf); DOCS=d.docsCorpus; VEC=d.vectors;
   DOCBYID=new Map(DOCS.map(x=>[x.id,x]));
-  initNumbers(); initQuestions(); initFree();
+  initNumbers(); initQuestions(); initFree(); initRerun();
 }).catch(e=>{ document.getElementById('explain').textContent='could not load the benchmark data: '+e.message; });
 
 function cosine(a,b){let d=0,na=0,nb=0;for(let i=0;i<a.length;i++){d+=a[i]*b[i];na+=a[i]*a[i];nb+=b[i]*b[i];}return d/(Math.sqrt(na)*Math.sqrt(nb)||1);}
@@ -335,7 +409,8 @@ function initQuestions(){
 }
 
 function show(q){
-  const dd=route(q.qterms,DOCS,IDF,{...DATA.gate,confidence:q.conf});
+  const conf={}; for(const dc of DOCS) conf[dc.id]=cosine(q.qvec,VEC[dc.id]); // recomputed live, never a stored number
+  const dd=route(q.qterms,DOCS,IDF,{...DATA.gate,confidence:conf});
   const rag=ragTop1(q.qvec);
   const goldKnown=!q.impossible;
   const ragRight=rag.answer===q.goldId;
@@ -354,7 +429,7 @@ function show(q){
     ddV = q.impossible ? `<span class="v-ok">Abstains — "not in your documents" ✓</span>` : `<span class="v-unk">Abstains — not a strong enough match</span>`;
     ddBody=`<div class="muted" style="font-size:13px">${esc(dd.why)}</div>`;
   } else {
-    ddV = ddRight ? `<span class="v-ok">Answers &amp; cites the right paragraph ✓</span>` : `<span class="v-no">Answers, but cites the wrong paragraph</span>`;
+    ddV = ddRight ? `<span class="v-ok">Answers &amp; cites the right paragraph ✓</span>` : (q.impossible ? `<span class="v-no">Answers anyway — fooled: the documents don't answer this</span>` : `<span class="v-no">Answers, but cites the wrong paragraph</span>`);
     ddBody=`<div class="src">${esc(docText(dd.answer).slice(0,260))}…</div><div class="cite">cited: ${dd.cite.map(esc).join(' · ')||'(structure)'}</div>`;
   }
   const ddCard=`<div class="sys dd"><h4>🛡️ DocDec <span class="muted" style="font-weight:400;font-size:12px">· grounded, cited, abstains</span></h4>
@@ -367,14 +442,62 @@ function show(q){
     : (ddRight?'DocDec grounded it and cited the source; the RAG also found it.':(dd.abstain?'DocDec abstained here — a miss on an answerable question, the recall trade, kept on the record.':'')));
 }
 
+const pct1=x=>x==null?'n/a':(100*x).toFixed(1)+'%';
+const where=id=>{const [doc,n]=String(id).split('#');return esc(doc.replace(/_/g,' '))+', paragraph '+(+n+1);};
 function initFree(){
   const inp=document.getElementById('freeq'), out=document.getElementById('freeOut');
+  const fm=DATA.freeMeasured, ot=DATA.offTopicMeasured;
+  const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
+  set('ot-n',ot.total); set('ot-a',ot.abstained+' of '+ot.total+' ('+pct1(ot.abstention)+')'); set('ot-f',pct1(fm.eval.outOfScopeAbstention)); set('ot-fb',pct1(fm.before.outOfScopeAbstention));
+  set('st-ot',ot.abstained+' / '+ot.total); set('st-adv',pct1(DATA.measured.docdec.groundedAbstention)); set('st-rag',pct1(DATA.measured.vectorRag.groundedAbstention));
+  document.getElementById('freeStats').innerHTML=`How this box decides was chosen on real held-out questions, not hand-picked ones: asked <b>${fm.counts.outOfScopeEval}</b> real questions about <em>other</em> topics (other Wikipedia articles), it says "not in your documents" to <b>${pct1(fm.eval.outOfScopeAbstention)}</b> of them (before this was tuned for the box: ${pct1(fm.before.outOfScopeAbstention)}), and it answers <b>${pct1(fm.eval.recall)}</b> of questions the documents do answer with the exact right paragraph. Its honest weak spot: questions <em>written to look like</em> the documents but not answered by them — it refuses only <b>${pct1(fm.eval.adversarialAbstention)}</b> of those. The full DocDec adds a relevance check on a local embedding model for exactly that case (it runs on the examples above); a browser has no embedding model, so this box is the structural part only.`;
   const run=()=>{const t=inp.value.trim();if(!t){out.style.display='none';return;}
-    const q=tokens(t);const r=route(q,DOCS,IDF,{minScore:DATA.gate.minScore,margin:DATA.gate.margin});out.style.display='block';
-    if(r.abstain){out.innerHTML=`<h4>🛡️ DocDec</h4><div class="verdict"><span class="v-unk">Abstains — "not in your documents"</span></div><div class="muted" style="font-size:13px">${esc(r.why)}</div><div class="muted" style="font-size:12px;margin-top:6px">A vector-RAG would still have returned its nearest chunk here.</div>`;}
-    else{out.innerHTML=`<h4>🛡️ DocDec</h4><div class="verdict"><span class="v-ok">Grounded — cites a document</span></div><div class="src">${esc(docText(r.answer).slice(0,280))}…</div><div class="cite">cited: ${r.cite.map(esc).join(' · ')}</div>`;}
+    const r=route(tokens(t),DOCS,IDF,DATA.freeGate);out.style.display='block';
+    if(r.abstain){out.innerHTML=`<h4>🛡️ DocDec</h4><div class="verdict"><span class="v-unk">Abstains — "not in your documents"</span></div><div class="muted" style="font-size:13px">${esc(r.why)}</div><div class="muted" style="font-size:12px;margin-top:6px">A vector-RAG would still have returned its nearest chunk here — it has no way to say no.</div>`;}
+    else{out.innerHTML=`<h4>🛡️ DocDec</h4><div class="verdict"><span class="v-ok">Answers from ${where(r.answer)}</span></div><div class="src">${esc(docText(r.answer).slice(0,320))}…</div><div class="cite">matched on: ${r.cite.map(esc).join(' · ')}</div>`;}
   };
   let tmr;inp.addEventListener('input',()=>{clearTimeout(tmr);tmr=setTimeout(run,220);});
+  document.querySelectorAll('[data-try]').forEach(b=>b.addEventListener('click',()=>{inp.value=b.dataset.try;run();inp.focus();}));
+}
+
+function initRerun(){
+  const btn=document.getElementById('rerunBtn'), st=document.getElementById('rerunStatus'), box=document.getElementById('rerunOut');
+  const runInWorker=()=>new Promise((ok,no)=>{
+    let w; try{ w=new Worker('rerun-worker.mjs',{type:'module'}); }catch(e){ no(new Error('this browser cannot run module workers')); return; }
+    w.onmessage=e=>{const m=e.data; if(m.stage) st.textContent=m.stage; else { w.terminate(); m.error?no(new Error(m.error)):ok(m); } };
+    w.onerror=e=>{ w.terminate(); no(new Error(e.message||'worker failed')); };
+    w.postMessage({vectors:DATA.vectors});
+  });
+  btn.addEventListener('click',async()=>{
+    btn.disabled=true; st.textContent='starting…';
+    try{
+      const {bench,free,offTopic,sc,secs:s,counts}=await runInWorker();
+      const secs=s.toFixed(1);
+      const M=DATA.measured, F=DATA.freeMeasured, g=o=>Object.entries(o).filter(([,v])=>v!=null&&v!==0).map(([k,v])=>k+' '+v).join(' · ');
+      const rows=[
+        ['DocDec settings, re-chosen on the practice questions', g(DATA.gate), g(bench.gate), JSON.stringify(bench.gate)===JSON.stringify(DATA.gate)],
+        ['DocDec · answers right (recall)', pct1(M.docdec.recall), pct1(bench.docdec.recall), bench.docdec.recall===M.docdec.recall],
+        ['DocDec · precision when it answers', pct1(M.docdec.precisionWhenAnswering), pct1(bench.docdec.precisionWhenAnswering), bench.docdec.precisionWhenAnswering===M.docdec.precisionWhenAnswering],
+        ['DocDec · invents on unanswerable', pct1(M.docdec.hallucinationRate), pct1(bench.docdec.hallucinationRate), bench.docdec.hallucinationRate===M.docdec.hallucinationRate],
+        ['DocDec · correctly refuses', pct1(M.docdec.groundedAbstention), pct1(bench.docdec.groundedAbstention), bench.docdec.groundedAbstention===M.docdec.groundedAbstention],
+        ['vector-RAG · answers right (recall)', pct1(M.vectorRag.recall), pct1(bench.vectorRag.recall), bench.vectorRag.recall===M.vectorRag.recall],
+        ['vector-RAG · invents on unanswerable', pct1(M.vectorRag.hallucinationRate), pct1(bench.vectorRag.hallucinationRate), bench.vectorRag.hallucinationRate===M.vectorRag.hallucinationRate],
+        ['vector-RAG · correctly refuses', pct1(M.vectorRag.groundedAbstention), pct1(bench.vectorRag.groundedAbstention), bench.vectorRag.groundedAbstention===M.vectorRag.groundedAbstention],
+        ['DocDec · refuses real questions on other subjects', DATA.offTopicMeasured.abstained+' of '+DATA.offTopicMeasured.total, offTopic.abstained+' of '+offTopic.total, offTopic.abstained===DATA.offTopicMeasured.abstained&&offTopic.total===DATA.offTopicMeasured.total],
+        ['free box settings, re-chosen', g(DATA.freeGate), g(free.gate), JSON.stringify(free.gate)===JSON.stringify(DATA.freeGate)],
+        ['free box · refuses real off-topic questions', pct1(F.eval.outOfScopeAbstention), pct1(free.eval.outOfScopeAbstention), free.eval.outOfScopeAbstention===F.eval.outOfScopeAbstention],
+        ['free box · answers right (recall)', pct1(F.eval.recall), pct1(free.eval.recall), free.eval.recall===F.eval.recall],
+        ['free box · refuses look-alike questions', pct1(F.eval.adversarialAbstention), pct1(free.eval.adversarialAbstention), free.eval.adversarialAbstention===F.eval.adversarialAbstention],
+      ];
+      document.querySelector('#rerunTable tbody').innerHTML=rows.map(([l,a,b,ok])=>`<tr><td>${esc(l)}</td><td>${esc(a)}</td><td><b>${esc(b)}</b></td><td class="${ok?'match':'mismatch'}">${ok?'✓ same':'✗ differs'}</td></tr>`).join('');
+      const bad=rows.filter(r=>!r[3]).length, v=document.getElementById('rerunVerdict');
+      v.style.borderColor=bad||sc.agree!==sc.checked?'var(--no)':'var(--ok)';
+      v.innerHTML=(bad?`<b class="mismatch">${bad} of ${rows.length} numbers differ</b> from the published ones — please tell us.`:`<b class="match">All ${rows.length} match exactly.</b>`)+
+        ` Your browser re-derived them in ${secs} s from the raw text of ${counts.paragraphs} paragraphs and ${counts.questions.toLocaleString('en-GB')} questions, trying ${bench.configsTried} settings for DocDec and ${free.configsTried} for the free box. To stay fast, the settings search re-uses each question's scores; we re-ran <b>${sc.checked.toLocaleString('en-GB')}</b> of its ${sc.of.toLocaleString('en-GB')} decisions through the full DocDec code just now — <b>${sc.agree.toLocaleString('en-GB')}</b> agree (GitHub checks all ${sc.of.toLocaleString('en-GB')} on every change).`;
+      box.style.display='block'; st.textContent='done in '+secs+' s'; btn.textContent='▶ Run it again';
+    }catch(e){ st.textContent='could not re-run: '+e.message; }
+    btn.disabled=false;
+  });
 }
 </script>
 </body>

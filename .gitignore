@@ -1,0 +1,4 @@
+# inputs to build-demo-data.mjs that stay on your machine
+dev-v2.0.json
+embed-cache.json
+node_modules
