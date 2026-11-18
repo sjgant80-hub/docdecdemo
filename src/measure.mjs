@@ -223,6 +223,11 @@ export function measure(D) {
   const C6 = { audited: auditSets.reduce((a, s) => a + s.audited, 0) + S3.graph.audited + S4.audited + S5.audited, verbatim: auditSets.reduce((a, s) => a + s.verbatim, 0) + S3.graph.verbatim + S4.verbatim + S5.verbatim };
   C6.pass = passAudit(C6.audited, C6.verbatim);
 
+  // the global view a flat index cannot give: what the corpus holds (themes), and what people asked that it does not
+  // (v2's eval refusals on the guild corpus, by the check that refused them)
+  const byCheck = { 2: 0, 3: 0, 4: 0, 5: 0 };
+  for (const r of R(evalQ, D.s1.scores, t1, 'col', prefix)) { const dd = decideRow(r, chosen.v2); if (dd.refuse === true && dd.check in byCheck) byCheck[dd.check]++; }
+  out.globalView = { themes: GR.themes(D.s2.paragraphs, 6), refusedByCheck: byCheck };
   const clean = (res) => Object.fromEntries(Object.entries(res).map(([k, v]) => [k, v ? strip(v) : v]));
   out.chosen = Object.fromEntries(Object.entries(chosen).map(([k, s]) => [k, settingOut(s)]));
   out.s1 = clean(e1); out.s2 = clean(e2); out.offTopic = offTopic; out.v1 = V1;
@@ -387,7 +392,7 @@ function cache(D, v2setting, prefix, t1, reader) {
   const pass = passCache({ bar: c, warm, cold: coldA, falseServeRate: fsr, served: sum('served'), staleServed });
   return { pass, audited, verbatim,
     claim: { warmAccuracy: r4(warm), coldAccuracy: r4(coldA), falseServeRate: r4(fsr), readerCallsSaved: sum('served'), staleServed, staleCaught, threshold: c },
-    report: { remembered: store.facts.length, refusedLogged: store.gaps.length, threshold: c, eval: n, served: sum('served'), falseServes: sum('falseServe'), staleServed, staleCaught,
+    report: { remembered: store.facts.length, answersGiven: factOf.size, askedOfRemembered: store.facts.reduce((a, f) => a + f.asked.length, 0), refusedLogged: store.gaps.length, threshold: c, eval: n, served: sum('served'), falseServes: sum('falseServe'), staleServed, staleCaught,
       warmRight: sum('okWarm'), coldRight: sum('okCold'), metabolismFourMonthsLater: { kept: metab.kept, pruned: metab.pruned.length } } };
 }
 

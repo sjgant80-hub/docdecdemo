@@ -63,18 +63,10 @@ function squadSet(docs, colDocs, questions, keepAll) {
   }
   return res;
 }
-const smallDocs = S.small.paragraphs;
-out.small = { q: squadSet(smallDocs, colDocsFull, S.small.questions, true), oos: squadSet(smallDocs, colDocsFull, S.small.outOfScope, true) };
-console.log(`S1 small scored (${((Date.now() - t0) / 1000).toFixed(0)} s)`);
+// (S1, the off-topic set and S4 are scored from the shipped vectors by src/assemble.mjs, in the export and in CI)
 out.full = { q: squadSet(S.full.paragraphs, colDocsFull, S.small.questions, false) };
 console.log(`S2 full scored (${((Date.now() - t0) / 1000).toFixed(0)} s)`);
-
-// ── S4 fresh: every v1 paragraph of S1 plus the 86 later versions, one flat corpus ──
-const freshDocs = [...smallDocs.map((p) => ({ id: p.id + '@v1', text: p.text, base: p.id })), ...S.fresh.map((f) => ({ id: f.v2.id, text: f.v2.text }))];
-const colFresh = new Map([...smallDocs.map((p) => [p.id + '@v1', colDocsFull.get(p.id)]), ...colDocsFresh]);
-const freshQ = S.fresh.map((f) => ({ qid: f.qid, text: f.text }));
-out.fresh = { q: squadSet(freshDocs, colFresh, freshQ, true) };
-console.log(`S4 fresh scored (${((Date.now() - t0) / 1000).toFixed(0)} s)`);
+void colDocsFresh;
 
 // ── S3 multi-hop: 4,937 pooled paragraphs, plus the graph's candidates for the walk ──
 const colDocsHot = loadCol('colbert-docs-hot.json');

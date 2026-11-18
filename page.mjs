@@ -73,7 +73,7 @@ if (E.fresh) { const f = E.fresh; const diff = (txt, val) => { const i = txt.ind
     : `<p><span class="verdict warn">DocDec, as of 2021:</span> the old version, which was true then, is kept with its end date, so history has an answer.</p><div class="passage">${diff(f.v1.text, f.oldAnswer)}</div>`; $('asNow').className = now ? '' : 'ghost'; $('asThen').className = now ? 'ghost' : ''; };
   $('asNow').onclick = () => show(true); $('asThen').onclick = () => show(false); show(true); }
 
-{ const s = R.s5; const c = C.C7.detail; $('exMemory').innerHTML = s ? `<div class="card"><p>Every answer DocDec verified was remembered with its source, version and exact words: <b>${s.remembered}</b> facts, and <b>${s.refusedLogged}</b> refused questions logged as gaps. Then every held-out question was asked again in different words (written by the local model).
+{ const s = R.s5; const c = C.C7.detail; $('exMemory').innerHTML = s ? `<div class="card"><p>Every answer DocDec verified was remembered with its source, version and exact words: <b>${s.answersGiven}</b> answers consolidated into <b>${s.remembered}</b> facts (the same words from the same source are one fact, with everyone who asked kept as its provenance), and <b>${s.refusedLogged}</b> refused questions logged as gaps. Then every held-out question was asked again in different words (written by the local model).
   A remembered answer is only served if the new question matches a remembered one closely (the bar was chosen on the tune split so that at most 1% of tune unanswerable questions got a stored answer) <i>and</i> its exact words are still in the current version of the source.</p>
   <p>Served from memory: <b>${s.served}</b> of ${s.eval} (${s.served} reader calls saved). Right with the memory: ${pct(c.warmAccuracy)}; without it: ${pct(c.coldAccuracy)}. Stored answers wrongly given to unanswerable questions: <b>${s.falseServes}</b>.
   After the fresh-set changes landed, answers whose source changed were caught by the re-check ${s.staleCaught} times and served stale <b>${s.staleServed}</b> times.
@@ -82,11 +82,19 @@ if (E.fresh) { const f = E.fresh; const diff = (txt, val) => { const i = txt.ind
 $('exFail').innerHTML = `<div class="grid two"><div class="card"><p class="small"><b>Refused, though the answer was there</b></p>${E.refusedAnswerable.map((x) => `<p class="q">${esc(x.question)}</p><p class="small">Answer was: ${esc(x.answers.join(' / '))}. Refused at check ${x.check}: ${esc(x.why)}.</p>`).join('')}</div>
   <div class="card"><p class="small"><b>Answered, though it should have refused</b></p>${E.answeredUnanswerable.map((x) => `<p class="q">${esc(x.question)}</p><p class="small">Gave “${esc(x.span.text)}” from ${pid(x.source.id)}: the words really are there, but they do not answer this question.</p>`).join('')}</div></div>`;
 
+{ const gv = R.globalView, rc = gv.refusedByCheck, total = Object.values(rc).reduce((a, b) => a + b, 0);
+  const why = { 2: 'no source cleared the bar', 3: 'a content word had no support', 4: 'the reader found no answer in the best source', 5: 'the reader’s phrase was not in the source' };
+  $('exPicture').innerHTML = `<div class="grid two"><div class="card"><p class="small"><b>What the nine-times corpus holds</b>: its ${gv.themes.length} themes, biggest first, each with its most distinctive words (a flat index has no such view; this comes from the graph layer).</p>
+  <div class="tbl"><table><tr><th>Theme</th><th class="num">Passages</th><th>Distinctive words</th></tr>${gv.themes.slice(0, 12).map((t) => `<tr><td>${esc(t.title.replace(/_/g, ' '))}</td><td class="num">${t.paragraphs}</td><td class="small">${esc(t.words.join(', '))}</td></tr>`).join('')}</table></div>
+  <p class="small muted">${gv.themes.length > 12 ? `and ${gv.themes.length - 12} more.` : ''}</p></div>
+  <div class="card"><p class="small"><b>What it was asked and refused</b> (held-out questions on the guild corpus, by the check that refused them). In use, this log is the list of gaps in your documents.</p>
+  <div class="tbl"><table><tr><th>Refused because</th><th class="num">Questions</th></tr>${Object.entries(rc).map(([k, v]) => `<tr><td>check ${k}: ${why[k]}</td><td class="num">${v}</td></tr>`).join('')}<tr><td><b>all refusals</b></td><td class="num"><b>${total}</b></td></tr></table></div></div></div>`; }
+
 // ── the trace ──
 if (E.grounded) { const g = E.grounded, ch = R.chosen.v2;
   $('trace').innerHTML = `<p class="q">${esc(g.question)}</p><ol class="steps">
-  <li><b>Shortlist (L5).</b> The conductor reads it as a one-fact question and takes the closest passages by plain cosine, a few milliseconds of work.</li>
-  <li><b>Late interaction (L1).</b> Every word-piece of the question finds its best match in each candidate. ${pid(g.source.id)} scores highest.</li>
+  <li><b>Route (L5).</b> The conductor reads it as ${g.route === 'compositional' ? 'a two-fact question (' + esc(g.routeWhy) + ')' : 'a one-fact question, so no graph walk is needed'}. (On a large corpus it would first narrow the field with plain cosine; in the measured runs every passage is scored, and what the shortlist would cost is measured separately in the conductor table below.)</li>
+  <li><b>Late interaction (L1).</b> Every word-piece of the question finds its best match in every passage. ${pid(g.source.id)} scores highest.</li>
   <li><b>The bar (L4, check 2).</b> Its score must reach ${ch.t}, the bar chosen on the tune split. It does.</li>
   <li><b>The evidence (L4, check 3).</b> The weakest content word's best match must reach ${ch.e}. ${evid(g.evidence)}</li>
   <li><b>The reader (L4, check 4).</b> The local model is shown only this passage and asked to copy the answering phrase or say NONE. It copied “${esc(g.span.text)}”.</li>

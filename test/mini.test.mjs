@@ -196,6 +196,9 @@ test('the memory on the miniature: served only above the tune bar, re-grounded, 
   assert.equal(s.threshold, 1, 'the 0.333 tune match would serve an unanswerable question');
   assert.deepEqual([s.remembered, s.refusedLogged, s.served, s.falseServes, s.staleServed, s.staleCaught, s.warmRight, s.coldRight], [4, 6, 2, 0, 0, 1, 5, 4]);
   assert.deepEqual(s.metabolismFourMonthsLater, { kept: 4, pruned: 0 });
+  assert.deepEqual([s.answersGiven, s.askedOfRemembered], [4, 4], 'four answers, four facts: nothing to consolidate here');
+  assert.deepEqual(R.globalView.refusedByCheck, { 2: 4, 3: 0, 4: 0, 5: 1 }, 'eval refusals: q6 q7 q8 q9 at the bar, q5 at the span check');
+  assert.deepEqual(R.globalView.themes.map((t) => [t.title, t.paragraphs]), [['A', 2], ['B', 1]]);
   assert.equal(R.claims.C7.pass, true);
   assert.equal(R.claims.C7.detail.readerCallsSaved, 2);
   assert.equal(R.claims.C6.pass, true);
@@ -217,6 +220,7 @@ test('examples are picked by their fixed rules', () => {
   assert.equal(E.lateWins[0].colbert.evidence.length, 2);
   assert.equal(E.offTopic.qid, 'oos:3');
   assert.deepEqual(E.nearMiss.map((x) => [x.qid, x.check]), [['q9', 2]]);
+  assert.deepEqual([E.grounded.route, E.grounded.routeWhy], ['lookup', 'one fact']);
   assert.equal(E.grounded.qid, 'q4', "q3's answer 'at Hastings' is not an exact match, so the first exact one is q4"); assert.deepEqual(E.grounded.span.text, 'French');
   assert.equal(E.multiHop.qid, 'h7', 'h4 is a walk-only win but its composed answer is wrong, so the first one composed right is shown'); assert.equal(E.multiHop.composed.answer, 'yes'); assert.equal(E.multiHop.linked, false);
   assert.equal(E.fresh.qid, 'q4'); assert.equal(E.fresh.flatSaid, 'French'); assert.equal(E.fresh.memorySaid, 'Latin');

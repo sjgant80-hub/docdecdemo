@@ -4,6 +4,7 @@ import L from './late.mjs';
 import GT from './gate.mjs';
 import GR from './graph.mjs';
 import M from './memory.mjs';
+import CD from './conduct.mjs';
 import { decideRow, rowsFor, NOW } from './measure.mjs';
 
 const DIM = 96;
@@ -52,7 +53,8 @@ export function pick(F, D, rec) {
 
   // 3 · a grounded answer, its span at offsets anyone can check
   const g = ans.map((q) => ({ q, a: v2(q) })).find((x) => groundedRight(x.q, x.a.d));
-  out.grounded = g ? { qid: g.q.qid, question: g.q.text, answers: g.q.answers, source: para(g.a.d.answer), span: g.a.d.span, sentence: g.a.d.sentence, evidence: evidenceRows(F, g.q.qid, g.a.d.answer) } : null;
+  const gr = g ? CD.classify(g.q.text) : null;
+  out.grounded = g ? { qid: g.q.qid, question: g.q.text, answers: g.q.answers, source: para(g.a.d.answer), span: g.a.d.span, sentence: g.a.d.sentence, evidence: evidenceRows(F, g.q.qid, g.a.d.answer), route: gr.route, routeWhy: gr.why } : null;
 
   // 4 · multi-hop: the walk composes the two sources the single-vector top-2 does not
   const P3 = new Map(D.s3.paragraphs.map((p) => [p.id, p]));
