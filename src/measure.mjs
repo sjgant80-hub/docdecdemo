@@ -225,8 +225,8 @@ export function measure(D) {
 
   // the global view a flat index cannot give: what the corpus holds (themes), and what people asked that it does not
   // (v2's eval refusals on the guild corpus, by the check that refused them)
-  const byCheck = { 2: 0, 3: 0, 4: 0, 5: 0 };
-  for (const r of R(evalQ, D.s1.scores, t1, 'col', prefix)) { const dd = decideRow(r, chosen.v2); if (dd.refuse === true && dd.check in byCheck) byCheck[dd.check]++; }
+  const byCheck = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+  for (const r of R(evalQ, D.s1.scores, t1, 'col', prefix)) { const dd = decideRow(r, chosen.v2); if (dd.refuse === true) byCheck[dd.check] += 1; }
   out.globalView = { themes: GR.themes(D.s2.paragraphs, 6), refusedByCheck: byCheck };
   const clean = (res) => Object.fromEntries(Object.entries(res).map(([k, v]) => [k, v ? strip(v) : v]));
   out.chosen = Object.fromEntries(Object.entries(chosen).map(([k, s]) => [k, settingOut(s)]));

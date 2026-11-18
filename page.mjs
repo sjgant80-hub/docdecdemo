@@ -83,7 +83,7 @@ $('exFail').innerHTML = `<div class="grid two"><div class="card"><p class="small
   <div class="card"><p class="small"><b>Answered, though it should have refused</b></p>${E.answeredUnanswerable.map((x) => `<p class="q">${esc(x.question)}</p><p class="small">Gave “${esc(x.span.text)}” from ${pid(x.source.id)}: the words really are there, but they do not answer this question.</p>`).join('')}</div></div>`;
 
 { const gv = R.globalView, rc = gv.refusedByCheck, total = Object.values(rc).reduce((a, b) => a + b, 0);
-  const why = { 2: 'no source cleared the bar', 3: 'a content word had no support', 4: 'the reader found no answer in the best source', 5: 'the reader’s phrase was not in the source' };
+  const why = { 1: 'there was nothing to search', 2: 'no source cleared the bar', 3: 'a content word had no support', 4: 'the reader found no answer in the best source', 5: 'the reader’s phrase was not in the source' };
   $('exPicture').innerHTML = `<div class="grid two"><div class="card"><p class="small"><b>What the nine-times corpus holds</b>: its ${gv.themes.length} themes, biggest first, each with its most distinctive words (a flat index has no such view; this comes from the graph layer).</p>
   <div class="tbl"><table><tr><th>Theme</th><th class="num">Passages</th><th>Distinctive words</th></tr>${gv.themes.slice(0, 12).map((t) => `<tr><td>${esc(t.title.replace(/_/g, ' '))}</td><td class="num">${t.paragraphs}</td><td class="small">${esc(t.words.join(', '))}</td></tr>`).join('')}</table></div>
   <p class="small muted">${gv.themes.length > 12 ? `and ${gv.themes.length - 12} more.` : ''}</p></div>

@@ -197,7 +197,7 @@ test('the memory on the miniature: served only above the tune bar, re-grounded, 
   assert.deepEqual([s.remembered, s.refusedLogged, s.served, s.falseServes, s.staleServed, s.staleCaught, s.warmRight, s.coldRight], [4, 6, 2, 0, 0, 1, 5, 4]);
   assert.deepEqual(s.metabolismFourMonthsLater, { kept: 4, pruned: 0 });
   assert.deepEqual([s.answersGiven, s.askedOfRemembered], [4, 4], 'four answers, four facts: nothing to consolidate here');
-  assert.deepEqual(R.globalView.refusedByCheck, { 2: 4, 3: 0, 4: 0, 5: 1 }, 'eval refusals: q6 q7 q8 q9 at the bar, q5 at the span check');
+  assert.deepEqual(R.globalView.refusedByCheck, { 1: 0, 2: 4, 3: 0, 4: 0, 5: 1 }, 'eval refusals: q6 q7 q8 q9 at the bar, q5 at the span check');
   assert.deepEqual(R.globalView.themes.map((t) => [t.title, t.paragraphs]), [['A', 2], ['B', 1]]);
   assert.equal(R.claims.C7.pass, true);
   assert.equal(R.claims.C7.detail.readerCallsSaved, 2);
