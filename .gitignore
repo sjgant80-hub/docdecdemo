@@ -2,3 +2,9 @@
 dev-v2.0.json
 embed-cache.json
 node_modules
+
+# DocDec v2 measurement harness: big inputs stay on your machine
+bench/node_modules/
+bench/models/
+bench/raw/
+bench/cache/

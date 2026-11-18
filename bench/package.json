@@ -1,0 +1,11 @@
+{
+  "name": "docdec-bench",
+  "private": true,
+  "type": "module",
+  "description": "DocDec v2 measurement harness: re-encodes the public corpora on your own machine (ColBERT via onnxruntime, nomic via Ollama, the reader via Ollama). Not needed to re-derive the published numbers; CI re-derives those from the shipped data.",
+  "dependencies": {
+    "@huggingface/transformers": "4.3.2",
+    "hyparquet": "1.33.1",
+    "hyparquet-compressors": "1.1.3"
+  }
+}
