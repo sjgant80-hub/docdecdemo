@@ -1,14 +1,32 @@
 name: gate
+# DocDec's proof, on GitHub's servers, on every push:
+#   v1 — the first version's page and numbers, kept exactly as published (its own tests)
+#   v2 — every module's tests; every published number re-derived from the shipped data (scores re-made from the shipped
+#        vectors, the whole measurement re-run, field for field); the page RUN against the shipped data; and a mutation
+#        gate on every module that must be CLEAN and must match the counts the page shows (data/v2/gates.json)
 on: [push, pull_request, workflow_dispatch]
 jobs:
-  gate:
+  v1:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with: { node-version: '22' }
-      - name: the page inlines the grounding kernel byte-for-byte, and the kernel routes/abstains
+      - name: v1 page inlines its kernel byte-for-byte
         run: node --test page-parity.test.mjs
-      - name: every published number is recomputed from the shipped raw data (and the fast search is proven equal to the kernel)
+      - name: v1 numbers re-derived from v1's shipped data
         run: node --test rerun.test.mjs
+  v2:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: '22' }
+      - name: module tests, the page run, and every published number re-derived
+        run: node --test test/*.test.mjs
+      - name: mutation gate — every module CLEAN, counts equal to data/v2/gates.json
+        run: |
+          git clone --depth 1 --branch v0.6 https://github.com/sjgant80-hub/witness.git .witness
+          node bench/gates.mjs --witness .witness/witness.mjs --check

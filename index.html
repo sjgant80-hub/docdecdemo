@@ -2,503 +2,430 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>DocDec — grounded answers from your documents</title>
-<meta name="description" content="DocDec answers a company's own documents through a grounding gate: it cites the exact source, or honestly abstains ('not in your documents') — where a plain vector-RAG always returns a nearest chunk and invents. Side by side on a public benchmark (SQuAD 2.0), measured, failures kept. Runs on your own hardware." />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>DocDec — the grounding layer</title>
+<meta name="description" content="DocDec answers only from your own documents, gives the exact words it relied on, and refuses what they do not support. Every claim is measured against the baseline that caught the first version, on public benchmarks, and anyone can re-run the numbers." />
 <style>
 :root{
   --bg:#f6f7f9; --panel:#ffffff; --ink:#15181d; --muted:#5b6471; --line:#e3e7ec;
   --accent:#2f6df6; --accent-ink:#fff; --ok:#1a8f4c; --no:#c23b3b; --warn:#b26a00; --unk:#6b7280;
-  --code:#f0f2f6; --shadow:0 1px 2px rgba(20,24,33,.05),0 6px 20px rgba(20,24,33,.06); --radius:14px; --maxw:960px;
+  --code:#f0f2f6; --mark:#fff1b8; --shadow:0 1px 2px rgba(20,24,33,.05),0 6px 20px rgba(20,24,33,.06); --radius:14px; --maxw:1000px;
+  color-scheme: light;
 }
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
   --bg:#0e1116; --panel:#151a21; --ink:#e8ecf1; --muted:#9aa5b3; --line:#232a33; --accent:#5b8cff; --accent-ink:#0e1116;
-  --ok:#49c17e; --no:#ff6b6b; --warn:#e0a94a; --unk:#9aa5b3; --code:#1b212a; --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 20px rgba(0,0,0,.35);
+  --ok:#49c17e; --no:#ff6b6b; --warn:#e0a94a; --unk:#9aa5b3; --code:#1b212a; --mark:#5a4a10; --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 20px rgba(0,0,0,.35); color-scheme: dark;
 }}
 :root[data-theme="dark"]{
   --bg:#0e1116; --panel:#151a21; --ink:#e8ecf1; --muted:#9aa5b3; --line:#232a33; --accent:#5b8cff; --accent-ink:#0e1116;
-  --ok:#49c17e; --no:#ff6b6b; --warn:#e0a94a; --unk:#9aa5b3; --code:#1b212a; --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 20px rgba(0,0,0,.35);
+  --ok:#49c17e; --no:#ff6b6b; --warn:#e0a94a; --unk:#9aa5b3; --code:#1b212a; --mark:#5a4a10; --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 20px rgba(0,0,0,.35); color-scheme: dark;
 }
 *{box-sizing:border-box}html,body{margin:0}
 body{background:var(--bg);color:var(--ink);font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;-webkit-font-smoothing:antialiased}
-.wrap{max-width:var(--maxw);margin:0 auto;padding:0 16px}
-header.hero{padding:48px 16px 20px}
+.wrap{max-width:var(--maxw);margin:0 auto;padding-inline:16px}
+header.hero{padding-block:44px 18px}
+.top{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;padding-block:12px}
+.top nav{display:flex;flex-wrap:wrap;gap:4px 14px;font-size:14px}
+.top nav a{color:var(--muted);text-decoration:none}.top nav a:hover{color:var(--accent)}
 .kicker{font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--accent);font-weight:700}
-h1{font-size:clamp(30px,6vw,50px);line-height:1.05;margin:.3em 0 .2em;letter-spacing:-.02em}
-.lede{font-size:clamp(17px,2.4vw,21px);color:var(--muted);max-width:52ch}
+h1{font-size:clamp(30px,6vw,48px);line-height:1.07;margin:.3em 0 .25em;letter-spacing:-.02em}
+.lede{font-size:clamp(17px,2.4vw,20px);color:var(--muted);max-width:60ch}
 .badges{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
 .badge{font-size:12.5px;font-weight:600;padding:5px 11px;border-radius:999px;border:1px solid var(--line);background:var(--panel);color:var(--muted)}
 .badge.ok{color:var(--ok);border-color:color-mix(in srgb,var(--ok) 35%,var(--line))}
-section{padding:28px 0;border-top:1px solid var(--line)}section:first-of-type{border-top:none}
+.badge.no{color:var(--no);border-color:color-mix(in srgb,var(--no) 35%,var(--line))}
+section{padding-block:30px;border-top:1px solid var(--line)}
 h2{font-size:clamp(22px,3.5vw,30px);letter-spacing:-.01em;margin:0 0 .5em}h3{font-size:17px;margin:1.2em 0 .4em}
-p{margin:.6em 0}.muted{color:var(--muted)}
-.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:18px}
-.grid{display:grid;gap:14px}@media(min-width:720px){.grid.two{grid-template-columns:1fr 1fr}.grid.three{grid-template-columns:1fr 1fr 1fr}}
-code,kbd{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.92em;background:var(--code);padding:1.5px 6px;border-radius:6px}
+p{margin:.6em 0}.muted{color:var(--muted)}.small{font-size:14px}
+a{color:var(--accent)}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow);padding:18px;min-width:0}
+.card + .card{margin-top:14px}
+.grid{display:grid;gap:14px}@media(min-width:760px){.grid.two{grid-template-columns:1fr 1fr}.grid.three{grid-template-columns:1fr 1fr 1fr}}
+.grid > .card + .card{margin-top:0}
+code,kbd{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.9em;background:var(--code);padding:1.5px 6px;border-radius:6px;overflow-wrap:anywhere}
 pre{background:var(--code);border:1px solid var(--line);border-radius:10px;padding:14px;overflow:auto;font:13px/1.5 ui-monospace,monospace}
+.tbl{overflow-x:auto}
 table{width:100%;border-collapse:collapse;font-size:14.5px}th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
 th{color:var(--muted);font-weight:600;font-size:12.5px;text-transform:uppercase;letter-spacing:.04em}
-.toc{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:14px;margin-top:10px}.toc a{color:var(--accent);text-decoration:none}
-.theme-toggle{position:fixed;top:12px;right:12px;z-index:10}
-.btn{appearance:none;border:1px solid var(--line);background:var(--panel);color:var(--ink);font:inherit;font-weight:600;padding:8px 13px;border-radius:10px;cursor:pointer}
-.btn:hover{border-color:var(--accent)}.btn.sm{padding:4px 10px;font-size:13px}
-.qchip{font-size:13px;padding:6px 11px;border-radius:999px;border:1px solid var(--line);background:var(--panel);cursor:pointer;color:var(--ink);text-align:left}
-.qchip:hover{border-color:var(--accent)}.qchip[aria-selected=true]{border-color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,var(--panel))}
-.qchip .tag{font-size:10.5px;font-weight:700;padding:1px 6px;border-radius:5px;margin-left:6px}
-.tag.win{background:color-mix(in srgb,var(--ok) 20%,transparent);color:var(--ok)}
-.tag.both{background:color-mix(in srgb,var(--accent) 18%,transparent);color:var(--accent)}
-.tag.miss{background:var(--code);color:var(--muted)}
-.tag.hall{background:color-mix(in srgb,var(--no) 16%,transparent);color:var(--no)}
-.sbs{display:grid;gap:14px}@media(min-width:720px){.sbs{grid-template-columns:1fr 1fr}}
-.sys{border:1px solid var(--line);border-radius:12px;padding:16px;background:var(--panel)}
-.sys h4{margin:0 0 4px;font-size:15px;display:flex;align-items:center;gap:8px}
-.sys .verdict{font-weight:700;font-size:15px;margin:8px 0}
-.sys.rag{border-color:color-mix(in srgb,var(--no) 30%,var(--line))}
-.sys.dd{border-color:color-mix(in srgb,var(--ok) 30%,var(--line))}
-.v-ok{color:var(--ok)}.v-no{color:var(--no)}.v-unk{color:var(--unk)}
-.src{font-size:13px;color:var(--muted);border-left:3px solid var(--line);padding:6px 10px;margin:8px 0;background:var(--code);border-radius:0 8px 8px 0}
-.cite{font-size:12px;color:var(--accent);font-family:ui-monospace,monospace}
-.gold{font-size:13px;margin-top:8px}
-.statrow{display:flex;gap:10px;flex-wrap:wrap;margin-top:6px}
-.stat{flex:1;min-width:120px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
-.stat .n{font-size:22px;font-weight:800;font-variant-numeric:tabular-nums}.stat .l{font-size:12px;color:var(--muted)}
-input[type=text]{font:inherit;width:100%;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
-footer{padding:36px 16px 60px;color:var(--muted);font-size:13.5px;text-align:center}
-.note{font-size:13.5px;color:var(--muted);border-left:3px solid var(--warn);padding-left:12px;margin:12px 0}
-.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}.btn:disabled{opacity:.6;cursor:progress}
-.chip{appearance:none;font:inherit;font-size:12.5px;padding:4px 10px;border-radius:999px;border:1px solid var(--line);background:var(--panel);color:var(--ink);cursor:pointer}
-.chip:hover,.chip:focus-visible{border-color:var(--accent);outline:none}
-.match{color:var(--ok);font-weight:700}.mismatch{color:var(--no);font-weight:700}
-#rerunTable td:nth-child(n+2){font-variant-numeric:tabular-nums}
-.tablewrap{overflow-x:auto;-webkit-overflow-scrolling:touch;max-width:100%}
-#rerunTable td:last-child{white-space:nowrap}
-@media (max-width:520px){#rerunTable{font-size:12.5px}#rerunTable th,#rerunTable td{padding:6px 5px}#rerunTable td:nth-child(2),#rerunTable td:nth-child(3){overflow-wrap:anywhere}}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+.tag{display:inline-block;font-size:12px;font-weight:700;padding:2px 9px;border-radius:999px;border:1px solid}
+.tag.pass{color:var(--ok);border-color:var(--ok)}.tag.fail{color:var(--no);border-color:var(--no)}.tag.info{color:var(--unk);border-color:var(--line)}
+.q{font-weight:600}
+.passage{font-size:14.5px;background:var(--code);border-radius:10px;padding:10px 12px;margin:.4em 0;border:1px solid var(--line)}
+mark{background:var(--mark);color:inherit;padding:0 2px;border-radius:3px}
+.verdict{font-weight:700}.verdict.ok{color:var(--ok)}.verdict.no{color:var(--no)}.verdict.warn{color:var(--warn)}
+.steps{counter-reset:s;list-style:none;padding:0;margin:0}
+.steps li{counter-increment:s;position:relative;padding-left:40px;margin:12px 0}
+.steps li::before{content:counter(s);position:absolute;left:0;top:0;width:28px;height:28px;border-radius:50%;background:var(--accent);color:var(--accent-ink);font-weight:700;display:grid;place-items:center;font-size:14px}
+button{font:inherit;font-weight:600;border-radius:10px;border:1px solid var(--accent);background:var(--accent);color:var(--accent-ink);padding:9px 16px;cursor:pointer}
+button.ghost{background:transparent;color:var(--accent)}
+button:disabled{opacity:.55;cursor:progress}
+input[type=number],input[type=text]{font:inherit;padding:8px 10px;border-radius:9px;border:1px solid var(--line);background:var(--panel);color:var(--ink);max-width:100%}
+label{font-size:14px}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.diagram{overflow-x:auto}
+.diagram svg{display:block;min-width:640px;width:100%;height:auto}
+.ev{display:flex;flex-wrap:wrap;gap:6px;margin:.4em 0}
+.ev span{font:12.5px ui-monospace,monospace;border:1px solid var(--line);border-radius:7px;padding:2px 7px;background:var(--panel)}
+.ev span.weak{border-color:var(--no);color:var(--no)}
+details{margin:.5em 0}summary{cursor:pointer;font-weight:600}
+dl.gloss dt{font-weight:700;margin-top:.7em}dl.gloss dd{margin:.1em 0 0 0;color:var(--muted)}
+footer{padding-block:28px 48px;border-top:1px solid var(--line);color:var(--muted);font-size:14px}
+.warnbox{border-color:color-mix(in srgb,var(--warn) 45%,var(--line))}
+#themeBtn{background:transparent;color:var(--muted);border-color:var(--line);padding:5px 11px;font-size:13px}
 </style>
 </head>
 <body>
-<button class="btn sm theme-toggle" id="themeBtn" aria-label="Toggle theme">◐ theme</button>
+<div class="wrap">
+<div class="top">
+  <strong>DocDec</strong>
+  <nav aria-label="sections">
+    <a href="#start">Start here</a><a href="#claims">Claims</a><a href="#see">See it</a><a href="#try">Ask your own</a><a href="#how">How it works</a>
+    <a href="#rerun">Re-run it</a><a href="#blueprint">Blueprint</a><a href="#business">For your business</a><a href="#paper">White paper</a><a href="#limits">Limits</a>
+  </nav>
+  <button id="themeBtn" type="button" aria-label="switch light or dark">Theme</button>
+</div>
 
-<header class="hero wrap">
-  <div class="kicker">DocDec · grounded answers from your own documents</div>
-  <h1>Your RAG invents. DocDec cites — or says it doesn't know.</h1>
-  <p class="lede">A plain vector-RAG returns the nearest chunk for <em>every</em> question, including the ones your documents don't answer — so it makes things up. DocDec answers only when a document grounds it, <b>cites the exact source</b>, and otherwise <b>abstains: "not in your documents."</b> See it side by side below, on a public benchmark, measured — failures kept.</p>
-  <div class="badges" id="badges">
-    <span class="badge ok">grounded · cites its source · abstains</span>
-    <span class="badge">runs on your hardware — documents never leave</span>
-    <span class="badge" id="b-measured">measured on SQuAD 2.0 · loading…</span>
-  </div>
-  <div class="toc" aria-label="Contents">
-    <a href="#try">See it</a><a href="#numbers">The numbers</a><a href="#how">How it works</a>
-    <a href="#why">Why it matters</a><a href="#security">Security</a><a href="#adopt">Adoption</a><a href="#honest">Honest limits</a>
-  </div>
+<header class="hero">
+  <div class="kicker">DocDec v2 · the grounding layer</div>
+  <h1>Answers only from your documents. Shows the exact words. Refuses the rest.</h1>
+  <p class="lede">DocDec sits between your people and your documents. Ask it a question and it finds the passage that answers it,
+  copies the answer word for word from that passage, and shows you where it is. If no passage supports an answer, it says so
+  instead of guessing. It runs on your own machine. Below, every claim is tested against a fair baseline on public data, with failures
+  shown, and you can re-run every number yourself.</p>
+  <div class="badges" id="badges"><span class="badge">loading the measurement…</span></div>
 </header>
 
-<main class="wrap">
-
-<section id="try">
-  <h2>See it — the same question through both</h2>
-  <p class="muted">Pick a real question from the benchmark corpus (Wikipedia articles on the Normans, Oxygen, and complexity theory). The baseline vector-RAG and DocDec both run live, right here in your browser. The coloured tag says what happens.</p>
-  <div id="qlist" style="display:flex;flex-direction:column;gap:7px;margin:14px 0"></div>
-  <div class="sbs" id="sbs"></div>
-  <p class="note" id="explain" style="margin-top:14px">—</p>
-
-  <h3>Or ask your own</h3>
-  <p class="muted" style="font-size:13.5px">Type anything. The loaded documents are three Wikipedia articles — <b>the Normans</b>, <b>Oxygen</b> and <b>computational complexity theory</b> — so ask about those, or ask about something else and watch it refuse. DocDec runs live in your browser: it answers with the paragraph it found and the words that matched, or says <b>"not in your documents."</b></p>
-  <div style="display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 10px;align-items:center">
-    <span class="muted" style="font-size:12.5px">in the documents:</span>
-    <button class="chip" data-try="where did the Normans settle">where did the Normans settle</button>
-    <button class="chip" data-try="who discovered oxygen">who discovered oxygen</button>
-    <button class="chip" data-try="what is a Turing machine">what is a Turing machine</button>
-    <span class="muted" style="font-size:12.5px;margin-left:6px">not in them:</span>
-    <button class="chip" data-try="how do I reset my password">how do I reset my password</button>
-    <button class="chip" data-try="what is the refund policy">what is the refund policy</button>
-    <span class="muted" style="font-size:12.5px;margin-left:6px">try to fool it:</span>
-    <button class="chip" data-try="what time does the office open">what time does the office open</button>
+<main>
+<section id="start">
+  <h2>Start here</h2>
+  <div class="card warnbox">
+    <h3 style="margin-top:0">The honest starting point</h3>
+    <p>The first version of DocDec was caught out. A member of the AI Craftspeople Guild re-ran our benchmark and showed that, at the
+    same setting, it did no better than a plain cosine similarity search with a tuned cut-off, and refused fewer unanswerable questions.
+    Its refusals came from that cut-off, not from its structure. We re-ran the comparison on the same questions:
+    <span id="v1line">…</span></p>
+    <p>So the baseline every claim on this page must beat is exactly that one: <b>a single-vector cosine search plus a cut-off tuned on
+    the same data</b>. Where DocDec v2 does not beat it, the claim is marked FAIL and not made. The rules were fixed and published
+    <a href="PREREG.md">before any held-out number was computed</a>.</p>
   </div>
-  <input type="text" id="freeq" aria-label="Ask a question of the loaded documents" placeholder="e.g. who defeated the Normans at Hastings?   ·   what is the capital of Peru?" />
-  <div id="freeOut" class="sys dd" style="margin-top:10px;display:none"></div>
-  <p class="muted" style="font-size:13px;margin-top:10px" id="freeStats">—</p>
+  <ol class="steps">
+    <li><b>Read the claims board.</b> Eight claims, each with its number, the baseline's number, a significance test and a verdict. <a href="#claims">Claims</a></li>
+    <li><b>Watch the mechanism.</b> Real questions from the test sets, picked by a fixed rule (not by hand): where one vector misses and
+    token matching finds the fact, the gate refusing, an answer with its exact words highlighted, two sources combined, an old fact
+    replaced by a new one, and the failures. <a href="#see">See it</a></li>
+    <li><b>Ask your own question.</b> Load the real model into this tab and type anything; watch it find the passage word by word,
+    or refuse. <a href="#try">Ask</a></li>
+    <li><b>Re-run it yourself.</b> One button re-derives every number in your browser from the shipped data and checks it against
+    what this page shows. <a href="#rerun">Re-run it</a></li>
+    <li><b>Read what it means for your business,</b> including the cost against a cloud setup, computed from sourced prices, with your
+    own question volume. <a href="#business">For your business</a></li>
+  </ol>
+  <details class="card"><summary>Words used on this page</summary>
+  <dl class="gloss">
+    <dt>RAG (retrieval-augmented generation)</dt><dd>The usual way to put AI over documents: cut them into chunks, turn each chunk into
+    one list of numbers (a vector), find the chunks whose vectors sit closest to the question's, and ask a language model to answer from them.</dd>
+    <dt>Single vector / cosine</dt><dd>One vector per passage; "closeness" is the cosine of the angle between two vectors. Fast, but
+    a whole paragraph squeezed into one point loses the specific word a question hinges on.</dd>
+    <dt>Late interaction (ColBERT)</dt><dd>One vector per word-piece instead of per passage. Every word of the question looks for its
+    best match anywhere in the passage, and the passage's score adds those best matches up. A missing specific term shows up as one
+    weak match instead of being averaged away.</dd>
+    <dt>The gate</dt><dd>The checks an answer must pass before it leaves. Each refusal names the check that stopped it.</dd>
+    <dt>The reader</dt><dd>A small language model running on your machine. It is only allowed to copy the answering phrase out of
+    the passage, or say NONE. The gate then checks the phrase really is in the passage, word for word. The model is never the source
+    of an answer.</dd>
+    <dt>Tune split / eval split</dt><dd>Every setting is chosen on a first slice of the questions, in file order (tune). Every result
+    is reported on the rest (eval), which the settings never saw.</dd>
+    <dt>McNemar test</dt><dd>A standard test for two systems answering the same questions: it looks only at the questions where they
+    disagree and asks whether one wins those more often than chance would give. A claim passes only below p = 0.05.</dd>
+    <dt>Unanswerable / near-miss</dt><dd>SQuAD 2.0's unanswerable questions were written by people to look answerable from a specific
+    paragraph that does not actually contain the answer. They are the hardest refusals there are.</dd>
+  </dl></details>
 </section>
 
-<section id="numbers">
-  <h2>The numbers — measured, not asserted</h2>
-  <p>DocDec vs a real vector-RAG (a local <code>nomic-embed</code> index, cosine top-1) over the <b id="n-eval">—</b> evaluation questions of the public <b>SQuAD 2.0</b> corpus — half answerable, half deliberately <em>unanswerable</em>. This is a public demonstration benchmark, not a customer result; your documents would be your own. No figure here is hand-typed — each is what the run produced.</p>
-  <div class="card">
-    <table id="metrics"><thead><tr><th>on the eval questions</th><th>DocDec (grounded)</th><th>vector-RAG (top-1)</th></tr></thead><tbody></tbody></table>
-    <p class="note" id="keyline" style="border-color:var(--ok)">—</p>
-  </div>
-  <h3>And on questions your documents simply don't cover</h3>
-  <p class="muted" style="font-size:14px">The table above is the hard test: SQuAD's unanswerable questions are written to <em>look</em> answerable. The everyday case is easier, and we measured it too — real questions people wrote about other subjects (other Wikipedia articles), put to the same documents, with the same settings:</p>
-  <div class="statrow">
-    <div class="stat"><div class="n" id="st-ot" style="color:var(--ok)">—</div><div class="l">questions on other subjects that DocDec refused</div></div>
-    <div class="stat"><div class="n" id="st-adv">—</div><div class="l">"look-alike" unanswerable questions it refused (the table above)</div></div>
-    <div class="stat"><div class="n" id="st-rag" style="color:var(--no)">—</div><div class="l">of either that a vector-RAG refuses — it can't</div></div>
-  </div>
-  <p class="muted" style="font-size:13px;margin-top:10px">Two things here are <b>true by architecture</b>, not by tuning: the vector-RAG abstains on <b>0%</b> of unanswerable questions (it can't — top-1 always returns a chunk), and every DocDec answer carries a citation. The rest — recall, precision, how <em>often</em> DocDec catches an unanswerable question — is measured above and discussed honestly in <a href="#honest">the limits</a>.</p>
+<section id="claims">
+  <h2>The claims board</h2>
+  <p class="muted">Each claim and its pass rule were published before the held-out numbers existed. PASS means it beat the baseline
+  under that rule; FAIL means it did not, and the claim is not made.</p>
+  <div class="tbl card"><table id="claimsTbl"><thead><tr><th>Claim</th><th>DocDec v2</th><th>Baseline</th><th>Test</th><th>Verdict</th></tr></thead><tbody></tbody></table></div>
+  <p class="small muted" id="claimsNote"></p>
+</section>
 
-  <h3 id="rerun">Don't trust us — re-run it yourself</h3>
-  <p>One click downloads the raw benchmark — the 130 paragraphs and 1,200 questions as plain text, plus the embedding vectors — and your browser recomputes everything from scratch with the same code: it splits the words, <b>re-chooses DocDec's settings on the practice questions</b> (so you can see we didn't cherry-pick them), then re-scores DocDec and the vector-RAG on the evaluation questions. Every number above is checked against what your machine gets. Nothing is uploaded. GitHub re-runs the same check on every change to this page.</p>
-  <button class="btn primary" id="rerunBtn">▶ Re-run the benchmark in my browser</button>
-  <span class="muted" id="rerunStatus" style="font-size:13px;margin-left:8px">≈6 MB download · a few seconds · runs in the background</span>
-  <div class="card" id="rerunOut" style="display:none;margin-top:12px">
-    <div class="tablewrap"><table id="rerunTable"><thead><tr><th>number</th><th>published</th><th>your browser</th><th></th></tr></thead><tbody></tbody></table></div>
-    <p class="note" id="rerunVerdict" style="border-color:var(--ok)">—</p>
-    <p class="muted" style="font-size:12.5px">Want it fully independent of this page? <code>build-demo-data.mjs</code> in the <a href="https://github.com/sjgant80-hub/docdecdemo">repository</a> rebuilds all of it from the public SQuAD 2.0 file (checked by its SHA-256) and a local embedding model on your own computer.</p>
+<section id="see">
+  <h2>See it: the mechanism on real test questions</h2>
+  <p class="muted">Every example below was picked by a fixed rule from the held-out questions, in file order. The rules are in
+  <code>src/examples.mjs</code>; the re-run checks that they pick these same examples. Failures are picked the same way.</p>
+
+  <h3 id="late">1 · One vector misses, token matching finds the fact</h3>
+  <div id="exLate"></div>
+
+  <h3 id="refuse">2 · The gate refusing</h3>
+  <div id="exRefuse"></div>
+
+  <h3 id="grounded">3 · A grounded answer: the exact words, at offsets anyone can check</h3>
+  <div id="exGrounded"></div>
+
+  <h3 id="multihop">4 · Two sources composed</h3>
+  <div id="exMulti"></div>
+
+  <h3 id="fresh">5 · Current, not stale</h3>
+  <div id="exFresh"></div>
+
+  <h3 id="memory">6 · Gets better with use, without serving stale answers</h3>
+  <div id="exMemory"></div>
+
+  <h3 id="failures">7 · Failures, kept</h3>
+  <div id="exFail"></div>
+</section>
+
+<section id="try">
+  <h2>Ask your own question: the real model, in your browser</h2>
+  <p>This box runs the same late-interaction model the measurements used (answerai-colbert-small-v1, a 34 MB download from
+  Hugging Face, checked against its pinned fingerprint before it runs) inside this tab. Your question is matched word by word
+  against the guild corpus, then the gate's first three checks run with the settings chosen on the tune split. Nothing you
+  type leaves the page. <span id="fbParity" class="muted"></span></p>
+  <div class="card">
+    <div class="row"><button id="fbLoad" type="button">Load the model</button><span id="fbStatus" class="small muted" role="status">Not loaded yet. The rest of the page does not need it.</span></div>
+    <div class="row" style="margin-top:12px"><input id="fbQ" type="text" placeholder="e.g. Who was the duke in the battle of Hastings?" disabled style="flex:1 1 320px" aria-label="your question"><button id="fbAsk" type="button" disabled>Ask</button></div>
+    <div class="row small" style="margin-top:8px">Try:
+      <button type="button" class="ghost" data-fbq="Who was the duke in the battle of Hastings?">the Normans</button>
+      <button type="button" class="ghost" data-fbq="Who discovered oxygen?">oxygen</button>
+      <button type="button" class="ghost" data-fbq="What does a Turing machine model?">complexity</button>
+      <button type="button" class="ghost" data-fbq="What is the capital city of Australia?">off-topic</button></div>
+    <div id="fbOut" style="margin-top:10px" aria-live="polite"></div>
   </div>
 </section>
 
 <section id="how">
-  <h2>How it works — traced from a real run</h2>
+  <h2>How it works</h2>
+  <p>Five layers. Plain vector search becomes the first, cheapest step. It narrows thousands of passages to a shortlist in
+  milliseconds, and everything after it is about making the answer trustworthy.</p>
+  <div class="card diagram" aria-label="how a question flows through DocDec">
+    <svg viewBox="0 0 980 300" role="img" aria-labelledby="dgT"><title id="dgT">A question flows through five layers: fast shortlist, late-interaction scoring, the graph walk for two-fact questions, the dated memory, and the verifier gate, which either answers with the exact words or refuses with a reason.</title>
+      <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="currentColor"/></marker></defs>
+      <g font-family="system-ui,Segoe UI,sans-serif" font-size="13" fill="currentColor" style="color:var(--ink)">
+        <rect x="8" y="110" width="110" height="64" rx="10" fill="none" stroke="currentColor"/><text x="63" y="137" text-anchor="middle" font-weight="700">Question</text><text x="63" y="156" text-anchor="middle" font-size="11.5">from a person</text>
+        <rect x="150" y="96" width="130" height="92" rx="10" fill="none" stroke="currentColor"/><text x="215" y="120" text-anchor="middle" font-weight="700">L5 conductor</text><text x="215" y="140" text-anchor="middle" font-size="11.5">reads the shape:</text><text x="215" y="156" text-anchor="middle" font-size="11.5">one fact or two?</text><text x="215" y="172" text-anchor="middle" font-size="11.5">cosine shortlist</text>
+        <rect x="312" y="96" width="140" height="92" rx="10" fill="none" stroke="currentColor"/><text x="382" y="120" text-anchor="middle" font-weight="700">L1 late interaction</text><text x="382" y="140" text-anchor="middle" font-size="11.5">every word finds its</text><text x="382" y="156" text-anchor="middle" font-size="11.5">best match; the weakest</text><text x="382" y="172" text-anchor="middle" font-size="11.5">match is the evidence</text>
+        <rect x="484" y="20" width="140" height="74" rx="10" fill="none" stroke="currentColor"/><text x="554" y="44" text-anchor="middle" font-weight="700">L2 graph walk</text><text x="554" y="63" text-anchor="middle" font-size="11.5">two-fact questions:</text><text x="554" y="79" text-anchor="middle" font-size="11.5">follow the mention</text>
+        <rect x="484" y="196" width="140" height="74" rx="10" fill="none" stroke="currentColor"/><text x="554" y="220" text-anchor="middle" font-weight="700">L3 dated memory</text><text x="554" y="239" text-anchor="middle" font-size="11.5">only versions valid</text><text x="554" y="255" text-anchor="middle" font-size="11.5">on the asked date</text>
+        <rect x="656" y="96" width="150" height="92" rx="10" fill="none" stroke="var(--accent)" stroke-width="2"/><text x="731" y="120" text-anchor="middle" font-weight="700">L4 verifier gate</text><text x="731" y="140" text-anchor="middle" font-size="11.5">bar · evidence ·</text><text x="731" y="156" text-anchor="middle" font-size="11.5">reader copies or NONE ·</text><text x="731" y="172" text-anchor="middle" font-size="11.5">word-for-word check</text>
+        <rect x="838" y="52" width="134" height="64" rx="10" fill="none" stroke="var(--ok)"/><text x="905" y="79" text-anchor="middle" font-weight="700" fill="var(--ok)">Answer</text><text x="905" y="97" text-anchor="middle" font-size="11.5">exact words + where</text>
+        <rect x="838" y="168" width="134" height="64" rx="10" fill="none" stroke="var(--no)"/><text x="905" y="195" text-anchor="middle" font-weight="700" fill="var(--no)">Refusal</text><text x="905" y="213" text-anchor="middle" font-size="11.5">which check, and why</text>
+        <g stroke="currentColor" fill="none" marker-end="url(#ar)"><path d="M118 142H148"/><path d="M280 142H310"/><path d="M452 130L482 70"/><path d="M452 156L482 220"/><path d="M452 142H654"/><path d="M624 60L656 116"/><path d="M624 232L656 170"/><path d="M806 128L836 92"/><path d="M806 158L836 196"/></g>
+      </g>
+    </svg>
+  </div>
+  <h3>One real question, traced step by step</h3>
+  <div class="card" id="trace">…</div>
+</section>
+
+<section id="numbers">
+  <h2>All the numbers</h2>
+  <p class="muted">Everything the measurement produced, including the systems that lost. "B1" is the baseline (cosine plus a tuned
+  cut-off). "+R" adds the reader gate. "v2" is DocDec v2 single-hop: late interaction, the evidence check and the reader.</p>
+  <h3>Single-hop routing and refusal: SQuAD 2.0, the guild's own corpus, and the same questions in a haystack nine times bigger</h3>
+  <div class="tbl card"><table id="sysTbl"></table></div>
+  <h3>Questions about other subjects entirely (off-topic)</h3>
+  <div class="tbl card"><table id="offTbl"></table></div>
+  <h3>Multi-hop (HotpotQA)</h3>
+  <div class="tbl card"><table id="hotTbl"></table></div>
+  <h3>Fresh facts</h3>
+  <div class="tbl card"><table id="freshTbl"></table></div>
+  <h3>The memory (repeat questions in other words)</h3>
+  <div class="tbl card"><table id="memTbl"></table></div>
+  <h3>The conductor</h3>
+  <div class="tbl card"><table id="condTbl"></table></div>
+  <h3>Speed on an ordinary laptop</h3>
+  <div class="tbl card"><table id="speedTbl"></table></div>
+</section>
+
+<section id="frontier">
+  <h2>The frontier prototype: hyperbolic memory (measured, not claimed)</h2>
+  <p>The idea: put the corpus inside a curved space (a Poincaré ball) where room grows exponentially toward the edge, as a tree
+  branches. General things sit near the centre, specific things near the edge, so "how specific is this" becomes a distance. The
+  published version trains a model to do it. We built the training-free version (direction from the ordinary embedding, radius from
+  depth: article, paragraph, sentence) and measured it against plain cosine on a mixed index of articles, paragraphs and sentences.
+  It is never a product claim either way.</p>
+  <div class="card" id="h1Out">…</div>
+</section>
+
+<section id="rerun">
+  <h2>Re-run it yourself</h2>
+  <p>Press the button and your browser downloads the shipped data and re-derives every number on this page with the same code:
+  the threshold searches, every gate decision, the graph walk, the memory, the significance tests and the example picks. It then
+  compares its result with what is published, field by field. <b>Quick</b> uses the shipped score tables. <b>Full</b> first re-scores
+  the guild corpus, the off-topic set, the fresh set and the paraphrases from the shipped vectors, a few minutes of work in a background thread.</p>
+  <div class="row"><button id="rerunQuick" type="button">Re-run (quick)</button><button id="rerunFull" class="ghost" type="button">Re-run (full, from vectors)</button></div>
+  <div class="card" id="rerunOut" hidden style="margin-top:12px"></div>
+  <details class="card"><summary>Re-run it from scratch on your own machine (the encoders and the reader too)</summary>
+  <p>The page cannot run the reader model or re-encode the large corpora, but you can. Everything below runs on your own computer;
+  nothing is sent anywhere.</p>
+  <pre>git clone https://github.com/sjgant80-hub/docdecdemo && cd docdecdemo/bench
+npm install                         # transformers.js (tokenizer), onnxruntime-node, a parquet reader
+# put the two public files in bench/raw/ (their SHA-256 values are pinned; anything else is refused):
+#   SQuAD 2.0 dev-v2.0.json   https://rajpurkar.github.io/SQuAD-explorer/
+#   HotpotQA distractor validation parquet   https://huggingface.co/datasets/hotpotqa/hotpot_qa
+# and the ColBERT model files in bench/models/answerai-colbert-small-v1/ (model_int8.onnx + tokenizer)
+ollama pull nomic-embed-text && ollama pull qwen2.5:7b
+node build-sets.mjs && node encode.mjs && node score.mjs
+node read-jobs.mjs p1 && node encode-extra.mjs && node export.mjs && node read-jobs.mjs p2 && node read-jobs.mjs needs && node export.mjs</pre>
+  <p class="small muted">The reader's outputs depend on the model build, so they are shipped. Every number on this page is re-derived
+  from shipped data on every push by GitHub's servers (the CI gate), and the encoders' outputs can be re-made with the commands above.</p>
+  </details>
+</section>
+
+<section id="blueprint">
+  <h2>Blueprint: how it is built, part by part</h2>
+  <p class="muted">Each part is a small, pure module with no network access. Each is mutation-tested: a tool rewrites the code one
+  operator at a time (&lt; to &lt;=, &amp;&amp; to ||, and so on) and the tests must catch every change. A change the tests miss is
+  a line nobody really checked.</p>
+  <div class="tbl card"><table id="bpTbl"><thead><tr><th>Part</th><th>File</th><th>What it does</th><th class="num">Mutation gate</th></tr></thead><tbody></tbody></table></div>
+</section>
+
+<section id="business">
+  <h2>For your business</h2>
   <div class="card">
-  <svg viewBox="0 0 860 250" width="100%" role="img" aria-label="A question flows into both systems; RAG returns a nearest chunk always; DocDec scores distinctive terms, cites or abstains">
-    <style>.b{fill:var(--code);stroke:var(--line)} .t{fill:var(--ink);font:13px ui-monospace,monospace} .l{fill:var(--muted);font:12px sans-serif} .ar{stroke:var(--accent);stroke-width:2;fill:none;marker-end:url(#a)} .no{fill:var(--no);font:600 12px ui-monospace,monospace} .ok{fill:var(--ok);font:600 12px ui-monospace,monospace}</style>
-    <defs><marker id="a" markerWidth="9" markerHeight="9" refX="7" refY="3" orient="auto"><path d="M0,0 L7,3 L0,6 Z" fill="var(--accent)"/></marker></defs>
-    <rect class="b" x="10" y="100" width="150" height="48" rx="8"/><text x="22" y="122" class="t">a question</text><text x="22" y="140" class="l">(may be unanswerable)</text>
-    <path class="ar" d="M165,110 L205,70"/><path class="ar" d="M165,138 L205,178"/>
-    <text x="212" y="40" class="l">vector-RAG</text>
-    <rect class="b" x="210" y="48" width="300" height="60" rx="8"/><text x="222" y="72" class="t">embed · cosine · take nearest chunk</text><text x="222" y="92" class="no">ALWAYS returns one — even when wrong</text>
-    <path class="ar" d="M515,78 L560,78"/><rect class="b" x="562" y="50" width="286" height="56" rx="8"/><text x="574" y="74" class="no">answers anyway → invents on the</text><text x="574" y="92" class="no">questions the documents don't cover</text>
-    <text x="212" y="162" class="l">DocDec</text>
-    <rect class="b" x="210" y="170" width="300" height="64" rx="8"/><text x="222" y="192" class="t">score distinctive terms vs each doc;</text><text x="222" y="212" class="t">gate: strong + unambiguous match?</text>
-    <path class="ar" d="M515,190 L560,170"/><path class="ar" d="M515,205 L560,222"/>
-    <rect class="b" x="562" y="140" width="286" height="46" rx="8"/><text x="574" y="168" class="ok">yes → answer + CITE the paragraph</text>
-    <rect class="b" x="562" y="196" width="286" height="46" rx="8"/><text x="574" y="224" class="unk" fill="var(--unk)" font-family="ui-monospace">no → ABSTAIN: "not in your documents"</text>
-  </svg>
+    <h3 style="margin-top:0">In one breath</h3>
+    <p>DocDec gives your people answers from your own documents that they can check in seconds: the exact words, the passage they
+    came from, and a refusal when the documents do not support an answer. It runs on hardware you already own, so the documents
+    never leave the building and there is no per-question bill.</p>
   </div>
-  <p class="muted" style="font-size:14px">The grounding is a plain, auditable function over your documents' distinctive terms — you can read exactly why it answered or refused, and the citation points at the paragraph that decided it. It also applies a <b>relevance check</b>: it abstains when the best paragraph isn't actually relevant to the question (not just sharing words), using a local-embedding signal — on your hardware, nothing sent out. Structure still picks and cites the answer; the check only vetoes a weak match. (The production engine deepens the routing privately; the behaviours — grounds, cites, abstains — are the same.)</p>
-</section>
-
-<section id="why">
-  <h2>Why it matters — for each role</h2>
+  <h3>What it does for each role</h3>
   <div class="grid two">
-    <div class="card"><h3>For the person asking</h3><p>An answer you can trust because it shows its source — and a straight "that's not in your documents" instead of a confident invention. The failure mode of RAG (a fluent wrong answer) is the one that costs you.</p></div>
-    <div class="card"><h3>For Compliance / Risk</h3><p>Every answer is <b>auditable</b>: it cites the exact paragraph, or it abstains. Grounded-or-silent is the property a regulator, a lawyer, or an auditor actually asks for — and the one a nearest-chunk retriever can't give.</p></div>
-    <div class="card"><h3>For IT / Security</h3><p><b>Sovereign.</b> The documents and the index stay on your hardware; nothing is sent to a vendor cloud per query. The grounding runs on CPU — no per-question API bill.</p></div>
-    <div class="card"><h3>For the data owner</h3><p>Point it at your corpus; it answers from <em>that</em>, cites it, and refuses what isn't there. Replace a disappointing RAG at the retrieval seam without re-platforming.</p></div>
+    <div class="card"><h3>Chief executive</h3><p>An AI answer you can put in front of a customer or a regulator, because it shows its
+    source and refuses rather than invents. The failure that ends careers, a fluent wrong answer believed, is the one it is built to prevent.</p></div>
+    <div class="card"><h3>Finance</h3><p>No per-question API bill and no per-seat AI subscription for this job. The comparison below is
+    computed from sourced, dated list prices and your own volume. The running cost is electricity on machines you already have.</p></div>
+    <div class="card"><h3>Operations</h3><p>Answers come with the exact sentence, so checking one takes seconds instead of re-reading
+    a page. When a policy changes, the new version supersedes the old one on its date, and nobody is told the old rule.</p></div>
+    <div class="card"><h3>Technology and security</h3><p>Runs offline on CPU: a 34 MB token-matching model and a 7-billion-parameter
+    local reader. No document, question or answer is sent to any vendor. Pure modules, mutation-tested, MIT-licensed: you can read,
+    run and keep all of it.</p></div>
+    <div class="card"><h3>Compliance, risk and legal</h3><p>Every answer is an audit record: question, source, version, the exact
+    character offsets of the words relied on, and the date. Every refusal names the check that stopped it. Old versions are closed,
+    never deleted, so "what did we say was true on that date" has an answer.</p></div>
+    <div class="card"><h3>The teams who use it</h3><p>Ask in plain words. If the answer is there you see it highlighted in its
+    passage; if not, you are told so straight, and the refused question is logged as a gap in the documents someone can fill.</p></div>
   </div>
-</section>
 
-<section id="security">
-  <h2>Security &amp; compliance, answered straight</h2>
-  <table>
+  <h3 id="cost">The cost, this against that</h3>
+  <div class="card">
+    <p>A cloud setup sends every question and its passage to a hosted model and bills per token. DocDec does the same job on your own
+    machine. Set your volume; every price is read from <a href="data/prices.lock.json">the price lock</a> (copied from the estate's
+    sourced registry, each with its source and the date it was checked), and every quantity is measured on this page.</p>
+    <div class="row"><label>Questions a month <input id="vol" type="number" min="0" step="1000" value="10000" inputmode="numeric"></label>
+      <label><input id="wattsLow" type="checkbox"> laptop already on (count only its base power)</label>
+      <label><input id="checkOn" type="checkbox" checked> count the staff time to check each answer</label></div>
+    <div class="tbl" style="margin-top:10px"><table id="costTbl"></table></div>
+    <p class="small muted" id="costNote"></p>
+  </div>
+
+  <h3>What it replaces</h3>
+  <div class="card"><p>A cloud RAG stack: a hosted embedding service, a vector database subscription and a hosted language model
+  billed per token, with the documents copied to each. DocDec replaces the whole answer path at the retrieval seam. Your document
+  stores stay where they are; DocDec indexes them where they are.</p></div>
+
+  <h3>Security, data protection and compliance, answered straight</h3>
+  <div class="tbl card"><table>
     <tr><th>Question</th><th>Answer</th></tr>
-    <tr><td>Where do our documents go?</td><td>Nowhere. Ingestion and answering run on your own hardware. This demo page itself loads a public corpus and runs entirely in your browser — no server call.</td></tr>
-    <tr><td>Can it invent an answer?</td><td>On a question your documents don't support, DocDec is built to abstain rather than return a nearest chunk. How often it catches that on an adversarial set is measured above and in <a href="#honest">the limits</a> — stated straight, not promised away.</td></tr>
-    <tr><td>Is every answer traceable?</td><td>Yes — each answer cites the source paragraph and the terms that resolved it. An abstention says why.</td></tr>
-    <tr><td>What does it cost to run?</td><td>The grounding runs on CPU on your own box — no per-query cloud call. (Commercials are a conversation, not a web page.)</td></tr>
-  </table>
+    <tr><td>Where do our documents go?</td><td>Nowhere. Indexing, matching, reading and answering all run on your own hardware. The measurement on this page was produced the same way, on one laptop.</td></tr>
+    <tr><td>Is there a data processor or an international transfer?</td><td>Not for DocDec. With no vendor receiving the data, there is no processor contract to sign and no transfer to justify for this path under UK GDPR. Your existing controls over your own machines still apply.</td></tr>
+    <tr><td>Can it invent an answer?</td><td>The reader can only copy words out of the passage, and the gate refuses any phrase it cannot find there word for word, so an answer's words always exist in your documents. It can still pick the wrong passage or the wrong phrase; how often it does is measured on this page, not promised away.</td></tr>
+    <tr><td>Can we audit an answer later?</td><td>Yes: source, version, character offsets and date for every answer; the reason for every refusal; old versions kept with their end dates.</td></tr>
+    <tr><td>Does it need a GPU or the internet?</td><td>No. The numbers on this page were measured on an ordinary laptop's CPU, offline.</td></tr>
+    <tr><td>Is it a regulated AI system under the EU AI Act?</td><td>That depends on what you use it for, not on DocDec. As a document-answering tool it is not in the Act's high-risk list by itself; if you put it inside a high-risk use, that use brings its own duties. We do not certify compliance on your behalf.</td></tr>
+  </table></div>
+
+  <h3>Rolling it out</h3>
+  <ol class="steps">
+    <li><b>Your corpus, your questions.</b> Index a slice of your own documents on a machine you own. Write down real questions, including ones you know the documents do not answer.</li>
+    <li><b>Measure it against what you have.</b> Run the same questions through your current setup and through DocDec with this page's harness: wrong answers, refusals, citations. Your numbers, your call.</li>
+    <li><b>Set the bar on your data.</b> The thresholds are chosen on a tune split of your own questions by the same rule used here, then checked on questions they never saw.</li>
+    <li><b>Replace the seam.</b> Put DocDec where the answers are produced. The refusal log becomes your list of gaps in the documents.</li>
+  </ol>
+
+  <h3>Support, ownership, exit</h3>
+  <div class="card"><p>Supplied by <a href="https://www.ai-nativesolutions.com">AI Native Solutions</a>; start a conversation through
+  that site. Support, service levels, warranty and liability are agreed per deployment, in each deployment's agreement. The software
+  is MIT-licensed: no licence fee, and it keeps running without us. There is no lock-in: your documents, your index and your audit
+  log are plain files on your own machines.</p></div>
+
+  <h3>Risks, answered straight</h3>
+  <div class="tbl card"><table>
+    <tr><th>Risk</th><th>Answer</th></tr>
+    <tr><td>It refuses questions it could have answered.</td><td>Yes, sometimes: that is the price of refusing what it cannot ground. The rate is on this page, and you set the bar on your own data.</td></tr>
+    <tr><td>It answers some unanswerable questions anyway.</td><td>Yes, on deliberately misleading questions it still does sometimes. The rate is on this page. The words it gives are always really in the cited passage, so a reader can see what it relied on.</td></tr>
+    <tr><td>Public benchmarks are not our documents.</td><td>Correct. This page shows the mechanism and the method on public data. The roll-out starts by measuring on yours.</td></tr>
+    <tr><td>A small local model is weaker than a frontier cloud model.</td><td>At writing answers, yes. Here it is only allowed to copy a phrase or say NONE, and the gate checks the copy. That is a task a small model can do, and doing it locally is what keeps the data in the building.</td></tr>
+  </table></div>
+
+  <h3>The case for the board</h3>
+  <div class="card" id="board">…</div>
 </section>
 
-<section id="adopt">
-  <h2>Adoption — how you'd roll it out</h2>
-  <div class="grid three">
-    <div class="card"><h3>1 · Try your corpus</h3><p>Point DocDec at a slice of your own documents and run your real questions — including the ones you <em>know</em> aren't covered, to watch it abstain.</p></div>
-    <div class="card"><h3>2 · Sit it beside your RAG</h3><p>Run the same questions through your current retriever and through DocDec; compare hallucinations, citations, and what each refuses. The before/after is the decision.</p></div>
-    <div class="card"><h3>3 · Replace the seam</h3><p>Swap DocDec in at the retrieval/answer boundary. It stays on your hardware; the answers come back grounded and cited.</p></div>
+<section id="paper">
+  <h2>White paper: subsuming RAG instead of replacing it</h2>
+  <div class="card">
+    <p><b>The problem.</b> The usual RAG pipeline cuts documents into chunks, embeds each as one vector, retrieves the nearest chunks
+    to the question and asks a model to answer from them. Its failures are structural, not a matter of tuning. Cutting into chunks
+    breaks facts apart. One vector per passage blurs the specific term a question hinges on. Retrieving once misses questions that
+    need two facts. A frozen index cannot tell a superseded fact from a current one. And nothing stops the model answering
+    confidently from the wrong text.</p>
+    <p><b>The approach.</b> Keep cosine retrieval, but only as the cheapest first step, and surround it with layers that each fix one
+    failure:</p>
+    <ul>
+      <li><b>L1, late interaction</b> (ColBERT, Khattab and Zaharia, SIGIR 2020), here the 33-million-parameter answerai-colbert-small-v1, int8, on CPU.</li>
+      <li><b>L2, a graph</b> over the corpus's own entities, so a two-fact question becomes a walk.</li>
+      <li><b>L3, a dated memory</b>: versions with validity windows, verified answers with their provenance, re-checked before reuse, and pruned when unused.</li>
+      <li><b>L4, a verifier gate</b> whose refusal is the product: a local reader may only copy, and the copy is checked word for word.</li>
+      <li><b>L5, a conductor</b> that reads the question's shape and routes it.</li>
+    </ul>
+    <p><b>The evaluation.</b> The hypotheses, the sets, the selection rules and the pass rules were published before the held-out
+    numbers were computed (<a href="PREREG.md">PREREG.md</a>). The sets:</p>
+    <ul>
+      <li><b>SQuAD 2.0 dev</b> (Rajpurkar, Jia and Liang, ACL 2018), whose unanswerable questions were written to look answerable: the guild's own corpus, then nine times the corpus.</li>
+      <li><b>HotpotQA</b> (Yang et al., EMNLP 2018) for two-fact questions.</li>
+      <li><b>Changed facts</b> in real paragraphs, for freshness.</li>
+      <li><b>Paraphrases</b> for the memory.</li>
+    </ul>
+    <p>The baseline is the one that caught the first version: cosine plus a cut-off tuned on the same data. Its prefix variant is
+    chosen in its own favour. Every threshold is searched exhaustively on the tune split, and every claim is decided by an exact
+    McNemar test on the eval split.</p>
+    <p><b>The results</b> are on the claims board above. They are generated from the record, not typed here, so this paragraph cannot
+    disagree with them: <span id="paperResults">…</span></p>
+    <p><b>The frontier.</b> Hyperbolic memory, with radius as specificity (Poincaré embeddings, Nickel and Kiela, NeurIPS 2017; the
+    hyperbolic-RAG line of work, 2025), was prototyped without training and measured. Its result is above, whichever way it fell.</p>
+    <p><b>Reproducibility.</b> The shipped data, the measurement code and the CI gate re-derive every number on every push. The
+    encoders and the reader can be re-run from scratch on any machine with the published commands.</p>
   </div>
 </section>
 
-<section id="honest">
-  <h2>Honest limits — the part a sales page usually hides</h2>
-  <div class="card" style="border-color:color-mix(in srgb,var(--warn) 40%,var(--line))">
-    <p style="margin-top:0">Grounding is a <b>trade</b>, and this benchmark shows it honestly — the numbers above are measured, not chosen. On SQuAD 2.0's answerable questions DocDec's recall sits <em>below</em> the vector-RAG's: a router that refuses weak matches answers fewer questions than one that always guesses. In exchange it answers with markedly higher precision, cites every answer, and — the point — abstains on a large share of the questions the documents don't cover, where the RAG hallucinates on <b>every single one</b>. (An earlier version of this page abstained on far fewer; a local-embedding relevance check more than tripled that, and the numbers above are the improved result.)</p>
-    <p><b>And it is not a magic no-hallucination box.</b> SQuAD 2.0's "unanswerable" questions are <em>adversarial</em> — written to look answerable from a specific paragraph — so a transparent term-grounding router is fooled on many of them (the exact rate is in the table above, not spun). On questions about <em>other subjects</em> — the common real case — it is a different story, and now a measured one: asked <b id="ot-n">—</b> real questions from other Wikipedia articles, the full DocDec refused <b id="ot-a">—</b>. (Real questions written by people about other topics; a different kind of off-topic question could do worse — we'd measure on yours.) The in-browser free box, which has only the structural part, refuses <b id="ot-f">—</b> of the same questions; before 16 November it was tuned like the benchmark and refused only <b id="ot-fb">—</b> — we found that, fixed it, and kept the before-number here. The honest summary: DocDec moves you from "always answers, often wrong" to "answers with a citation, or admits it doesn't know," and the measured abstention strengthens as the routing deepens in the production engine. Those numbers are a public-corpus demo, not a promise about your documents — we'd measure on yours.</p>
+<section id="limits">
+  <h2>Honest limits</h2>
+  <div class="card warnbox" id="limitsBox">
+    <ul>
+      <li>These are public benchmarks, not a client's documents. They show the mechanism and the method; your corpus gets its own measurement.</li>
+      <li>The freshness test changes real paragraphs synthetically: the new value is not meant to be true, only different. It tests the mechanism, not world knowledge.</li>
+      <li>The paraphrases were written by the local model, not by people.</li>
+      <li>The reader is a 7-billion-parameter model on a laptop CPU. A larger local model may read better; its numbers would have to be measured, not assumed.</li>
+      <li>The hyperbolic prototype is training-free. A trained version is the published idea; we have not built or measured one.</li>
+      <li>The speed figures were measured on one laptop. Yours will differ.</li>
+      <li id="limitsDyn"></li>
+    </ul>
   </div>
+  <p class="small muted">The first version's page is kept as it was: <a href="v1.html">DocDec v1</a>.</p>
 </section>
-
 </main>
 
 <footer>
-  <p><b>DocDec</b> — grounded answers from your own documents. A public demonstration on SQuAD 2.0 (CC BY-SA 4.0); your corpus would be your own, on your hardware.</p>
-  <p>The grounding kernel on this page is byte-identical to the one a mutation gate proves in the engine; a parity test holds the two together.</p>
+  <p><b>DocDec</b>, the grounding layer. Built by Kar. Supplied by <a href="https://www.ai-nativesolutions.com">AI Native Solutions</a>. Software: MIT licence.</p>
+  <p>Data: SQuAD 2.0 (CC BY-SA 4.0), HotpotQA (CC BY-SA 4.0). Models: answerai-colbert-small-v1 (Apache-2.0), nomic-embed-text, qwen2.5:7b, all run locally.
+  Source and history: <a href="https://github.com/sjgant80-hub/docdecdemo">github.com/sjgant80-hub/docdecdemo</a> · <a href="PREREG.md">pre-registration</a>.</p>
 </footer>
+</div>
 
-<script>
-// ---- theme ----
-(function(){const b=document.getElementById('themeBtn');let t=null;try{t=localStorage.getItem('dd-theme')}catch(e){}if(t)document.documentElement.setAttribute('data-theme',t);
-b.addEventListener('click',()=>{const c=document.documentElement.getAttribute('data-theme');const mq=matchMedia('(prefers-color-scheme:dark)').matches;const n=(c?c:(mq?'dark':'light'))==='dark'?'light':'dark';document.documentElement.setAttribute('data-theme',n);try{localStorage.setItem('dd-theme',n)}catch(e){}});})();
-
-// ============================================================
-//  THE GROUNDING KERNEL — byte-identical to kernel.mjs (proven by a mutation gate in the engine repo).
-// ============================================================
-const arr = (x) => (Array.isArray(x) ? x : []);
-const num = (x) => (typeof x === 'number' && Number.isFinite(x) ? x : 0);
-const str = (x) => (typeof x === 'string' ? x : '');
-
-const STOP = new Set(('a an and the of to in on for is are was were be been being as at by with from this that these those it its ' +
-  'which who whom whose what when where why how do does did not no nor can could would should will shall may might must ' +
-  'i you he she they we me him her them us my your his their our or if then than so such about into over under out up down ' +
-  'have has had been more most some any all each both few other own same very s t').split(' '));
-
-// tokens(text) → the distinctive content tokens of a string: lowercased words, stopwords and 1-char tokens dropped, de-duplicated.
-function tokens(text) {
-  const raw = str(text).toLowerCase().match(/[a-z0-9]+/g) || [];
-  const out = [];
-  const seen = new Set();
-  for (const w of raw) {
-    if (w.length < 2 || STOP.has(w)) continue;
-    if (!seen.has(w)) { seen.add(w); out.push(w); }
-  }
-  return out;
-}
-
-// idf(docs) → Map term → inverse-document-frequency weight ln(1 + N/df). A term in few documents is distinctive (high);
-// a term in every document is near-useless (low). docs: [{ id, terms:[...] }]. The structure of the corpus, deterministic.
-function idf(docs) {
-  const d = arr(docs);
-  const N = d.length;
-  const df = new Map();
-  for (const doc of d) {
-    for (const t of new Set(arr(doc && doc.terms))) df.set(t, (df.get(t) || 0) + 1);
-  }
-  const w = new Map();
-  for (const [t, c] of df) w.set(t, Math.log(1 + N / c));
-  return w;
-}
-
-// score(qTerms, docTerms, idfMap) → the structural match: summed idf of the terms the question and the document share,
-// and the shared terms themselves (the citation — the structure that resolved it).
-function score(qTerms, docTerms, idfMap) {
-  const dset = new Set(arr(docTerms));
-  const w = idfMap instanceof Map ? idfMap : new Map();
-  let s = 0;
-  const shared = [];
-  for (const t of new Set(arr(qTerms))) {
-    if (dset.has(t)) { s += (w.get(t) || 0); shared.push(t); }
-  }
-  return { score: s, shared };
-}
-
-// focus(qTerms, idfMap) → the question's most distinctive (highest-idf) term: the one it most hinges on.
-function focus(qTerms, idfMap) {
-  const w = idfMap instanceof Map ? idfMap : new Map();
-  let best = null, bw = -Infinity;
-  for (const t of arr(qTerms)) { const v = w.get(t) || 0; if (v > bw) { bw = v; best = t; } }
-  return best;
-}
-
-// route(qTerms, docs, idfMap, opts) → the grounded decision. Scores every document, then the GATE — answer the best
-// document only if EVERY check it is given passes; otherwise ABSTAIN. The gate is tunable:
-//   minScore     (default 1)  — the summed-idf match must clear this
-//   margin       (default 0)  — the best must beat the runner-up by this (unambiguous)
-//   minCoverage  (default 0)  — at least this fraction of the question's distinct terms must be present
-//   requireFocus (default false) — the question's most distinctive term must be in the matched document
-//   minConfidence + confidence  — a relevance veto: confidence (a Map/obj docId→score, e.g. a local-embedding cosine)
-//                                  for the best doc must reach minConfidence. Structure still picks and cites the
-//                                  answer; this only vetoes a weak match. Omit both to route on structure alone.
-// Returns { answer, cite, score, runnerUp } or { abstain:true, why }.
-function route(qTerms, docs, idfMap, opts) {
-  const o = opts && typeof opts === 'object' ? opts : {};
-  const minScore = num(o.minScore) || (o.minScore === 0 ? 0 : 1);
-  const margin = num(o.margin);
-  const minCoverage = num(o.minCoverage);
-  const scored = arr(docs).map((d) => ({ id: d && d.id, ...score(qTerms, d && d.terms, idfMap) }));
-  scored.sort((a, b) => (b.score - a.score) || String(a.id).localeCompare(String(b.id)));
-  const best = scored[0];
-  const second = scored[1];
-  if (!best || best.score < minScore) {
-    return { abstain: true, why: 'not in your documents: no document matches strongly enough' };
-  }
-  if (second && best.score - second.score < margin) {
-    return { abstain: true, why: 'ambiguous: more than one document matches about equally' };
-  }
-  const nq = new Set(arr(qTerms)).size || 1;
-  if (best.shared.length / nq < minCoverage) { // minCoverage defaults to 0, so coverage (always >= 0) never trips it when off
-    return { abstain: true, why: 'not in your documents: too few of the question\'s terms are present' };
-  }
-  if (o.requireFocus === true) {
-    const f = focus(qTerms, idfMap);
-    if (f !== null && !best.shared.includes(f)) {
-      return { abstain: true, why: 'not in your documents: the question\'s key term is absent' };
-    }
-  }
-  if (o.minConfidence != null && Number.isFinite(o.minConfidence)) {
-    const c = o.confidence;
-    const conf = c instanceof Map ? c.get(best.id) : (c == null ? undefined : c[best.id]);
-    if (!(num(conf) >= o.minConfidence)) {
-      return { abstain: true, why: 'not in your documents: the best match is not relevant enough' };
-    }
-  }
-  return { answer: best.id, cite: best.shared, score: best.score, runnerUp: second ? second.score : 0 };
-}
-
-// top1(scored) → the baseline vector-RAG decision: the single highest-scoring document, NEVER abstaining. `scored` is
-// [{ id, score }] (e.g. cosine similarities). This is what a plain RAG does — and why it answers even when it shouldn't.
-function top1(scored) {
-  const s = arr(scored).filter((x) => x && typeof x === 'object');
-  if (s.length === 0) return { abstain: true, why: 'empty index' };
-  let best = s[0];
-  for (const x of s) if (num(x.score) > num(best.score)) best = x;
-  return { answer: best.id, score: num(best.score) };
-}
-
-// evaluate(predictions, gold) → the honest metrics, byte-identical to the mutation-gated engine's. predictions:
-// [{ qid, answer } | { qid, abstain:true }]; gold: [{ qid, goldId, impossible }]. Correctness = the exact paragraph.
-function evaluate(predictions, gold) {
-  const byId = new Map(arr(gold).map((g) => [g && g.qid, g]));
-  const m = {
-    answerable: { total: 0, right: 0, wrong: 0, abstained: 0 },
-    unanswerable: { total: 0, abstained: 0, answered: 0 }, // answered = hallucination
-  };
-  for (const p of arr(predictions)) {
-    const g = byId.get(p && p.qid);
-    if (!g) continue;
-    const abstained = p.abstain === true;
-    if (g.impossible) {
-      m.unanswerable.total++;
-      if (abstained) m.unanswerable.abstained++; else m.unanswerable.answered++;
-    } else {
-      m.answerable.total++;
-      if (abstained) m.answerable.abstained++;
-      else if (p.answer === g.goldId) m.answerable.right++;
-      else m.answerable.wrong++;
-    }
-  }
-  const a = m.answerable, u = m.unanswerable;
-  const answered = a.right + a.wrong;
-  return {
-    ...m,
-    // of the answerable questions it chose to answer, how many cite the right document
-    precisionWhenAnswering: answered > 0 ? a.right / answered : null,
-    // of all answerable questions, how many it answered right (recall)
-    recall: a.total > 0 ? a.right / a.total : null,
-    // of the unanswerable questions, how many it wrongly answered — the hallucination rate
-    hallucinationRate: u.total > 0 ? u.answered / u.total : null,
-    // of the unanswerable, how many it correctly refused — grounded abstention
-    groundedAbstention: u.total > 0 ? u.abstained / u.total : null,
-  };
-}
-// ============================================================
-
-const esc=s=>String(s).replace(/[&<>]/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]));
-let DATA=null, IDF=null, DOCS=null, VEC=null, DOCBYID=null;
-
-fetch('demo-data.json').then(r=>r.json()).then(d=>{
-  DATA=d; IDF=new Map(d.idf); DOCS=d.docsCorpus; VEC=d.vectors;
-  DOCBYID=new Map(DOCS.map(x=>[x.id,x]));
-  initNumbers(); initQuestions(); initFree(); initRerun();
-}).catch(e=>{ document.getElementById('explain').textContent='could not load the benchmark data: '+e.message; });
-
-function cosine(a,b){let d=0,na=0,nb=0;for(let i=0;i<a.length;i++){d+=a[i]*b[i];na+=a[i]*a[i];nb+=b[i]*b[i];}return d/(Math.sqrt(na)*Math.sqrt(nb)||1);}
-function ragTop1(qvec){const scored=DOCS.map(dc=>({id:dc.id,score:cosine(qvec,VEC[dc.id])}));return top1(scored);}
-function docText(id){const d=DOCBYID.get(id);return d?d.text:'(unknown)';}
-
-function initNumbers(){
-  const m=DATA.measured;
-  document.getElementById('n-eval').textContent=m.counts.eval;
-  document.getElementById('b-measured').textContent='measured on SQuAD 2.0 · '+m.counts.eval+' eval questions';
-  const pct=x=>x==null?'n/a':(100*x).toFixed(1)+'%';
-  const dd=m.docdec, rag=m.vectorRag;
-  const rows=[['recall (answerable questions answered right)',dd.recall,rag.recall,'up'],
-    ['precision when it answers',dd.precisionWhenAnswering,rag.precisionWhenAnswering,'up'],
-    ['hallucination on unanswerable',dd.hallucinationRate,rag.hallucinationRate,'down'],
-    ['grounded abstention (correctly refused)',dd.groundedAbstention,rag.groundedAbstention,'up']];
-  const tb=document.querySelector('#metrics tbody');
-  tb.innerHTML=rows.map(([l,a,b])=>`<tr><td>${l}</td><td><b>${pct(a)}</b></td><td>${pct(b)}</td></tr>`).join('');
-  document.getElementById('keyline').innerHTML=esc(m.readMe.theKeyContrast);
-}
-
-function initQuestions(){
-  const order={win:0,'both-right':1,'dd-missed':2,'dd-hallucinated':3};
-  const tags={win:['win','DocDec abstains · RAG invents'],'both-right':['both','both answer · DocDec cites'],'dd-missed':['miss','honest: DocDec abstained on an answerable'],'dd-hallucinated':['hall','honest: DocDec also missed this']};
-  const qs=[...DATA.demoQuestions].sort((a,b)=>(order[a.label]??9)-(order[b.label]??9));
-  const list=document.getElementById('qlist');
-  list.innerHTML=qs.map((q,i)=>{const[c,lbl]=tags[q.label]||['miss',q.label];return `<button class="qchip" data-i="${i}" aria-selected="${i===0}">${esc(q.text)}<span class="tag ${c}">${lbl}</span></button>`;}).join('');
-  list.addEventListener('click',e=>{const b=e.target.closest('[data-i]');if(!b)return;list.querySelectorAll('[data-i]').forEach(x=>x.setAttribute('aria-selected','false'));b.setAttribute('aria-selected','true');show(qs[+b.dataset.i]);});
-  show(qs[0]);
-}
-
-function show(q){
-  const conf={}; for(const dc of DOCS) conf[dc.id]=cosine(q.qvec,VEC[dc.id]); // recomputed live, never a stored number
-  const dd=route(q.qterms,DOCS,IDF,{...DATA.gate,confidence:conf});
-  const rag=ragTop1(q.qvec);
-  const goldKnown=!q.impossible;
-  const ragRight=rag.answer===q.goldId;
-  const ddRight=!dd.abstain&&dd.answer===q.goldId;
-  // RAG card
-  const ragV = q.impossible
-    ? `<span class="v-no">Answers anyway — hallucination</span>`
-    : (ragRight?`<span class="v-ok">Returned the right paragraph</span>`:`<span class="v-no">Returned the wrong paragraph</span>`);
-  const ragCard=`<div class="sys rag"><h4>🔎 Baseline vector-RAG <span class="muted" style="font-weight:400;font-size:12px">· nearest chunk, no abstain</span></h4>
-    <div class="verdict">${ragV}</div>
-    <div class="src">${esc(docText(rag.answer).slice(0,260))}…</div>
-    <div class="muted" style="font-size:12px">It returns this for <em>every</em> question — there is no "I don't know".</div></div>`;
-  // DocDec card
-  let ddV, ddBody;
-  if(dd.abstain){
-    ddV = q.impossible ? `<span class="v-ok">Abstains — "not in your documents" ✓</span>` : `<span class="v-unk">Abstains — not a strong enough match</span>`;
-    ddBody=`<div class="muted" style="font-size:13px">${esc(dd.why)}</div>`;
-  } else {
-    ddV = ddRight ? `<span class="v-ok">Answers &amp; cites the right paragraph ✓</span>` : (q.impossible ? `<span class="v-no">Answers anyway — fooled: the documents don't answer this</span>` : `<span class="v-no">Answers, but cites the wrong paragraph</span>`);
-    ddBody=`<div class="src">${esc(docText(dd.answer).slice(0,260))}…</div><div class="cite">cited: ${dd.cite.map(esc).join(' · ')||'(structure)'}</div>`;
-  }
-  const ddCard=`<div class="sys dd"><h4>🛡️ DocDec <span class="muted" style="font-weight:400;font-size:12px">· grounded, cited, abstains</span></h4>
-    <div class="verdict">${ddV}</div>${ddBody}</div>`;
-  document.getElementById('sbs').innerHTML=ragCard+ddCard;
-  const gold = goldKnown ? `The documents <b>do</b> answer this. Gold answer: “${esc(q.answerText||'')}” (in ${esc(q.goldId)}).`
-    : `The documents do <b>not</b> answer this — it is one of SQuAD's unanswerable questions. The honest response is to abstain.`;
-  document.getElementById('explain').innerHTML=gold+' '+(q.impossible
-    ? (dd.abstain?'DocDec abstained; the RAG answered anyway.':'Here DocDec was fooled too (this is an adversarial unanswerable question) — kept on the record, see the limits.')
-    : (ddRight?'DocDec grounded it and cited the source; the RAG also found it.':(dd.abstain?'DocDec abstained here — a miss on an answerable question, the recall trade, kept on the record.':'')));
-}
-
-const pct1=x=>x==null?'n/a':(100*x).toFixed(1)+'%';
-const where=id=>{const [doc,n]=String(id).split('#');return esc(doc.replace(/_/g,' '))+', paragraph '+(+n+1);};
-function initFree(){
-  const inp=document.getElementById('freeq'), out=document.getElementById('freeOut');
-  const fm=DATA.freeMeasured, ot=DATA.offTopicMeasured;
-  const set=(id,v)=>{const el=document.getElementById(id);if(el)el.textContent=v;};
-  set('ot-n',ot.total); set('ot-a',ot.abstained+' of '+ot.total+' ('+pct1(ot.abstention)+')'); set('ot-f',pct1(fm.eval.outOfScopeAbstention)); set('ot-fb',pct1(fm.before.outOfScopeAbstention));
-  set('st-ot',ot.abstained+' / '+ot.total); set('st-adv',pct1(DATA.measured.docdec.groundedAbstention)); set('st-rag',pct1(DATA.measured.vectorRag.groundedAbstention));
-  document.getElementById('freeStats').innerHTML=`How this box decides was chosen on real held-out questions, not hand-picked ones: asked <b>${fm.counts.outOfScopeEval}</b> real questions about <em>other</em> topics (other Wikipedia articles), it says "not in your documents" to <b>${pct1(fm.eval.outOfScopeAbstention)}</b> of them (before this was tuned for the box: ${pct1(fm.before.outOfScopeAbstention)}), and it answers <b>${pct1(fm.eval.recall)}</b> of questions the documents do answer with the exact right paragraph. Its honest weak spot: questions <em>written to look like</em> the documents but not answered by them — it refuses only <b>${pct1(fm.eval.adversarialAbstention)}</b> of those. The full DocDec adds a relevance check on a local embedding model for exactly that case (it runs on the examples above); a browser has no embedding model, so this box is the structural part only.`;
-  const run=()=>{const t=inp.value.trim();if(!t){out.style.display='none';return;}
-    const r=route(tokens(t),DOCS,IDF,DATA.freeGate);out.style.display='block';
-    if(r.abstain){out.innerHTML=`<h4>🛡️ DocDec</h4><div class="verdict"><span class="v-unk">Abstains — "not in your documents"</span></div><div class="muted" style="font-size:13px">${esc(r.why)}</div><div class="muted" style="font-size:12px;margin-top:6px">A vector-RAG would still have returned its nearest chunk here — it has no way to say no.</div>`;}
-    else{out.innerHTML=`<h4>🛡️ DocDec</h4><div class="verdict"><span class="v-ok">Answers from ${where(r.answer)}</span></div><div class="src">${esc(docText(r.answer).slice(0,320))}…</div><div class="cite">matched on: ${r.cite.map(esc).join(' · ')}</div>`;}
-  };
-  let tmr;inp.addEventListener('input',()=>{clearTimeout(tmr);tmr=setTimeout(run,220);});
-  document.querySelectorAll('[data-try]').forEach(b=>b.addEventListener('click',()=>{inp.value=b.dataset.try;run();inp.focus();}));
-}
-
-function initRerun(){
-  const btn=document.getElementById('rerunBtn'), st=document.getElementById('rerunStatus'), box=document.getElementById('rerunOut');
-  const runInWorker=()=>new Promise((ok,no)=>{
-    let w; try{ w=new Worker('rerun-worker.mjs',{type:'module'}); }catch(e){ no(new Error('this browser cannot run module workers')); return; }
-    w.onmessage=e=>{const m=e.data; if(m.stage) st.textContent=m.stage; else { w.terminate(); m.error?no(new Error(m.error)):ok(m); } };
-    w.onerror=e=>{ w.terminate(); no(new Error(e.message||'worker failed')); };
-    w.postMessage({vectors:DATA.vectors});
-  });
-  btn.addEventListener('click',async()=>{
-    btn.disabled=true; st.textContent='starting…';
-    try{
-      const {bench,free,offTopic,sc,secs:s,counts}=await runInWorker();
-      const secs=s.toFixed(1);
-      const M=DATA.measured, F=DATA.freeMeasured, g=o=>Object.entries(o).filter(([,v])=>v!=null&&v!==0).map(([k,v])=>k+' '+v).join(' · ');
-      const rows=[
-        ['DocDec settings, re-chosen on the practice questions', g(DATA.gate), g(bench.gate), JSON.stringify(bench.gate)===JSON.stringify(DATA.gate)],
-        ['DocDec · answers right (recall)', pct1(M.docdec.recall), pct1(bench.docdec.recall), bench.docdec.recall===M.docdec.recall],
-        ['DocDec · precision when it answers', pct1(M.docdec.precisionWhenAnswering), pct1(bench.docdec.precisionWhenAnswering), bench.docdec.precisionWhenAnswering===M.docdec.precisionWhenAnswering],
-        ['DocDec · invents on unanswerable', pct1(M.docdec.hallucinationRate), pct1(bench.docdec.hallucinationRate), bench.docdec.hallucinationRate===M.docdec.hallucinationRate],
-        ['DocDec · correctly refuses', pct1(M.docdec.groundedAbstention), pct1(bench.docdec.groundedAbstention), bench.docdec.groundedAbstention===M.docdec.groundedAbstention],
-        ['vector-RAG · answers right (recall)', pct1(M.vectorRag.recall), pct1(bench.vectorRag.recall), bench.vectorRag.recall===M.vectorRag.recall],
-        ['vector-RAG · invents on unanswerable', pct1(M.vectorRag.hallucinationRate), pct1(bench.vectorRag.hallucinationRate), bench.vectorRag.hallucinationRate===M.vectorRag.hallucinationRate],
-        ['vector-RAG · correctly refuses', pct1(M.vectorRag.groundedAbstention), pct1(bench.vectorRag.groundedAbstention), bench.vectorRag.groundedAbstention===M.vectorRag.groundedAbstention],
-        ['DocDec · refuses real questions on other subjects', DATA.offTopicMeasured.abstained+' of '+DATA.offTopicMeasured.total, offTopic.abstained+' of '+offTopic.total, offTopic.abstained===DATA.offTopicMeasured.abstained&&offTopic.total===DATA.offTopicMeasured.total],
-        ['free box settings, re-chosen', g(DATA.freeGate), g(free.gate), JSON.stringify(free.gate)===JSON.stringify(DATA.freeGate)],
-        ['free box · refuses real off-topic questions', pct1(F.eval.outOfScopeAbstention), pct1(free.eval.outOfScopeAbstention), free.eval.outOfScopeAbstention===F.eval.outOfScopeAbstention],
-        ['free box · answers right (recall)', pct1(F.eval.recall), pct1(free.eval.recall), free.eval.recall===F.eval.recall],
-        ['free box · refuses look-alike questions', pct1(F.eval.adversarialAbstention), pct1(free.eval.adversarialAbstention), free.eval.adversarialAbstention===F.eval.adversarialAbstention],
-      ];
-      document.querySelector('#rerunTable tbody').innerHTML=rows.map(([l,a,b,ok])=>`<tr><td>${esc(l)}</td><td>${esc(a)}</td><td><b>${esc(b)}</b></td><td class="${ok?'match':'mismatch'}">${ok?'✓ same':'✗ differs'}</td></tr>`).join('');
-      const bad=rows.filter(r=>!r[3]).length, v=document.getElementById('rerunVerdict');
-      v.style.borderColor=bad||sc.agree!==sc.checked?'var(--no)':'var(--ok)';
-      v.innerHTML=(bad?`<b class="mismatch">${bad} of ${rows.length} numbers differ</b> from the published ones — please tell us.`:`<b class="match">All ${rows.length} match exactly.</b>`)+
-        ` Your browser re-derived them in ${secs} s from the raw text of ${counts.paragraphs} paragraphs and ${counts.questions.toLocaleString('en-GB')} questions, trying ${bench.configsTried} settings for DocDec and ${free.configsTried} for the free box. To stay fast, the settings search re-uses each question's scores; we re-ran <b>${sc.checked.toLocaleString('en-GB')}</b> of its ${sc.of.toLocaleString('en-GB')} decisions through the full DocDec code just now — <b>${sc.agree.toLocaleString('en-GB')}</b> agree (GitHub checks all ${sc.of.toLocaleString('en-GB')} on every change).`;
-      box.style.display='block'; st.textContent='done in '+secs+' s'; btn.textContent='▶ Run it again';
-    }catch(e){ st.textContent='could not re-run: '+e.message; }
-    btn.disabled=false;
-  });
-}
-</script>
+<script type="module" src="page.mjs"></script>
+<script type="module" src="freebox.mjs"></script>
 </body>
 </html>
