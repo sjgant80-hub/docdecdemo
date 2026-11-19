@@ -30,8 +30,8 @@
    "clean": true
   },
   "src/stats.mjs": {
-   "total": 23,
-   "killed": 23,
+   "total": 27,
+   "killed": 27,
    "survived": 0,
    "ignored": 0,
    "clean": true

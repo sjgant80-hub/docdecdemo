@@ -15,6 +15,24 @@ test('lnChoose', () => {
   assert.ok(Math.abs(S.lnChoose(1000, 500) - 689.4672) < 1e-3);
 });
 
+test('overPow2: a whole number over 2^n, the same bits everywhere', () => {
+  assert.equal(S.overPow2(3n, 1), 1.5);
+  assert.equal(S.overPow2(1n, 0), 1);
+  assert.equal(S.overPow2(5n, -3), 40);
+  assert.equal(S.overPow2(1n, -1023), 2 ** 1023);
+  assert.equal(S.overPow2(1n, -1024), Infinity);
+  assert.equal(S.overPow2(1n, -1001), 2 ** 1001, 'more than one step up');
+  assert.equal(S.overPow2(1n, 1074), 5e-324, 'the smallest double');
+  assert.equal(S.overPow2(1n, 1075), 0);
+  assert.equal(S.overPow2(1n, 1001), 2 ** -1001, 'more than one step down');
+  assert.equal(S.overPow2(1n << 1500n, 1500), 1, 'too big to convert directly: shifted first');
+  assert.equal(S.overPow2(3n << 2000n, 2000), 3);
+  assert.equal(S.overPow2((1n << 1022n) * 3n, 1022), 3, 'past 2^1023, still converts without a shift');
+  assert.equal(S.overPow2((1n << 1024n) - 1n, 1024), 1, 'rounds up to 2^1024 as a Number: shifted, then 1');
+  assert.equal(S.overPow2((1n << 1100n) + (1n << 1060n), 1100), 1 + 2 ** -40, 'low bits beyond the shift kept where they fit');
+  assert.equal(S.overPow2(0n, 50), 0);
+});
+
 test('mcnemar: exact two-sided p', () => {
   assert.equal(S.mcnemar(0, 0), 1);
   assert.equal(S.mcnemar(5, 5), 1, 'capped at 1');
@@ -22,6 +40,20 @@ test('mcnemar: exact two-sided p', () => {
   assert.ok(Math.abs(S.mcnemar(6, 0) - 2 / 64) < 1e-12);
   assert.ok(Math.abs(S.mcnemar(1, 9) - 2 * 11 / 1024) < 1e-12);
   assert.ok(Math.abs(S.mcnemar(2, 10) - 0.0385742) < 1e-6);
+  // exact, not approximately: the tail is summed in whole numbers, so these are the true fractions to the last bit
+  assert.equal(S.mcnemar(0, 6), 2 / 64);
+  assert.equal(S.mcnemar(1, 9), 22 / 1024);
+  assert.equal(S.mcnemar(9, 1), 22 / 1024, 'symmetric');
+  assert.equal(S.mcnemar(2, 10), 158 / 4096);              // 2 · (1 + 12 + 66) / 2^12
+  assert.equal(S.mcnemar(3, 9), 2 * 299 / 4096);           // 1 + 12 + 66 + 220
+  assert.equal(S.mcnemar(4, 4), 1);
+  assert.equal(S.mcnemar(0, 1), 1, '2 · 1/2 is 1');
+  assert.equal(S.mcnemar(0, 2), 0.5);
+  // a large sample: agrees with the sum in logs, and lands in (0, 1)
+  const big = S.mcnemar(480, 560), viaLogs = (() => { let t = 0; for (let i = 0; i <= 480; i++) t += Math.exp(S.lnChoose(1040, i) - 1040 * Math.LN2); return 2 * t; })();
+  assert.ok(big > 0 && big < 1 && Math.abs(big - viaLogs) / viaLogs < 1e-9, `big ${big} vs logs ${viaLogs}`);
+  assert.equal(S.mcnemar(0, 1100), 0, 'beyond the smallest double it is 0, not NaN');
+  assert.ok(S.mcnemar(600, 640) > 0.2 && S.mcnemar(600, 640) < 0.3, String(S.mcnemar(600, 640)));
   assert.equal(S.mcnemar(-3, 4), S.mcnemar(0, 4), 'negative counts read as 0');
   assert.equal(S.mcnemar(1.5, 4), S.mcnemar(0, 4));
   assert.equal(S.mcnemar(4, 1.5), S.mcnemar(4, 0));

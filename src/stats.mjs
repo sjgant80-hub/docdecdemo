@@ -12,15 +12,29 @@ export function lnChoose(n, k) {
   return s;
 }
 
-// mcnemar(b, c) → exact two-sided p for b discordant pairs one way and c the other (binomial, p = 1/2)
+// overPow2(x, n) → the BigInt x divided by 2^n, as a Number. Only integer steps, conversions the language defines exactly
+// (BigInt → Number rounds to nearest) and division by exact powers of two, so every engine returns the same bits.
+export function overPow2(x, n) {
+  let s = 0;
+  while (Number(x >> BigInt(s)) === Infinity) s += 64;   // too big to convert (past ~2^1024): drop low bits until it fits
+  let v = Number(x >> BigInt(s)), e = n - s;
+  while (e > 0) { const step = Math.min(e, 1000); v /= Number(1n << BigInt(step)); e -= step; }
+  while (e < 0) { const step = Math.min(-e, 1000); v *= Number(1n << BigInt(step)); e += step; }
+  return v;
+}
+
+// mcnemar(b, c) → exact two-sided p for b discordant pairs one way and c the other (binomial, p = 1/2).
+// The tail Σ C(n, i), i ≤ min(b, c), is summed in whole numbers and divided by 2^n once (overPow2), so the p-value is
+// identical in every browser and in Node: summing exp(log …) terms instead differs in the last digit from engine to
+// engine, because the language leaves the last bit of Math.exp and Math.log to each implementation.
 export function mcnemar(b, c) {
   const B = Number.isInteger(b) ? Math.max(0, b) : 0, Cc = Number.isInteger(c) ? Math.max(0, c) : 0;
   const n = B + Cc;
   if (n === 0) return 1;
-  const k = Math.min(B, Cc);
-  let tail = 0;
-  for (let i = 0; i <= k; i++) tail += Math.exp(lnChoose(n, i) - n * Math.LN2);
-  return Math.min(1, 2 * tail);
+  const k = Math.min(B, Cc), N = BigInt(n);
+  let term = 1n, tail = 1n;
+  for (let i = 1; i <= k; i++) { term = (term * (N - BigInt(i) + 1n)) / BigInt(i); tail += term; }
+  return Math.min(1, overPow2(2n * tail, n));
 }
 
 // paired(a, b) — a, b: arrays of 0/1 outcomes for the same questions in the same order. → { aOnly, bOnly, p, a, b, n }
@@ -51,4 +65,4 @@ export function median(xs) {
   return v.length % 2 === 1 ? v[m] : (v[m - 1] + v[m]) / 2;
 }
 
-export default { lnChoose, mcnemar, paired, beats, median };
+export default { lnChoose, overPow2, mcnemar, paired, beats, median };
