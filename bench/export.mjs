@@ -54,7 +54,10 @@ const qText = new Map([...S.small.questions.map((q) => [q.qid, q.text]), ...S.sm
 const pText = new Map([...S.full.paragraphs.map((p) => [p.id, p.text]), ...S.small.paragraphs.map((p) => [p.id + '@v1', p.text]), ...S.fresh.map((f) => [f.v2.id, f.v2.text])]);
 const P3 = new Map(S.hot.paragraphs.map((p) => [p.id, p]));
 const one = {}, two = {}, wanted = [], seen = new Set();
-const look = (key, prompt, into) => { if (!seen.has(key)) { seen.add(key); const hit = rc[cacheKey(prompt)]; if (hit) into[key] = hit.raw; else wanted.push({ key, prompt }); } return into[key]; };
+// how many shipped reader answers ran at each CPU thread count (a speed setting kept out of the cache key; see reader.mjs)
+const threads = {};
+const look = (key, prompt, into) => { if (!seen.has(key)) { seen.add(key); const hit = rc[cacheKey(prompt)];
+  if (hit) { into[key] = hit.raw; const t = hit.threads ? String(hit.threads) : 'Ollama default (6 on this laptop)'; threads[t] = (threads[t] || 0) + 1; } else wanted.push({ key, prompt }); } return into[key]; };
 const oneLookup = new Proxy({}, { get: (_, key) => { if (typeof key !== 'string') return undefined; const i = key.lastIndexOf('|'); const qid = key.slice(0, i), pid = key.slice(i + 1);
   if (!qText.has(qid) || !pText.has(pid)) throw new Error('no text for reader key ' + key); return look(key, PROMPT_ONE(pText.get(pid), qText.get(qid)), one); } });
 const hotQ = new Map(S.hot.questions.map((q) => [q.qid, q.text]));
@@ -74,7 +77,7 @@ F.reader = { model: READER_MODEL, options: READER_OPTIONS, one: Object.fromEntri
 writeFileSync(C('hot-pairs.json'), JSON.stringify(rec.hotPairs));
 writeFileSync(C('needs.json'), JSON.stringify(wanted));
 const record = publishable(rec, examples, { squadSha256: S.squadSha256, hotpotSha256: S.hotpotSha256,
-  colbert: 'answerdotai/answerai-colbert-small-v1 model_int8.onnx sha256 de45baeaa7a48cda647fcf71582e2a0920dca303654034570aa6144d84526283', reader: READER_MODEL, readerOptions: READER_OPTIONS });
+  colbert: 'answerdotai/answerai-colbert-small-v1 model_int8.onnx sha256 de45baeaa7a48cda647fcf71582e2a0920dca303654034570aa6144d84526283', reader: READER_MODEL, readerOptions: READER_OPTIONS, readerThreads: threads });
 for (const [name, obj] of Object.entries({ s1: F.s1, s2: F.s2, s3: F.s3, s4: F.s4, s5: F.s5, h1: F.h1, reader: F.reader, v1: F.v1 })) if (obj) writeFileSync(join(OUT, name + '.json'), JSON.stringify(obj));
 writeFileSync(join(OUT, 'record.json'), JSON.stringify(record, null, 1) + '\n');
 writeFileSync(join(OUT, 'scores-s1.json'), JSON.stringify({ q: pre.s1Scores, oos: pre.oosScores, s4: pre.s4Scores, qq: pre.qq, para: pre.paraScores }));

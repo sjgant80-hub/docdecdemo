@@ -52,13 +52,17 @@ function generate(prompt, options) {
 }
 
 // ask(prompt, options) → { raw, ms, cached } — the model's raw text, cached by (model, options, prompt)
+// DOCDEC_READER_THREADS (optional) sets the CPU threads Ollama uses: a speed setting, not a model option, so it is kept
+// out of the cache key and recorded with each answer. (Measured 2026-11-18 on this laptop: 6 → 12 threads, prompt
+// reading 20.9 → 25.5 tokens/s, the same answers on the four timed prompts.)
+const THREADS = Number(process.env.DOCDEC_READER_THREADS) > 0 ? Number(process.env.DOCDEC_READER_THREADS) : null;
 export async function ask(prompt, options = READER_OPTIONS) {
   const k = createHash('sha1').update(READER_MODEL + JSON.stringify(options) + prompt).digest('hex');
   if (cache[k]) return { ...cache[k], cached: true };
   const t0 = Date.now();
-  const j = await generate(prompt, options);
+  const j = await generate(prompt, THREADS ? { ...options, num_thread: THREADS } : options);
   if (typeof j.response !== 'string') throw new Error('reader: no response ' + JSON.stringify(j).slice(0, 200));
-  cache[k] = { raw: j.response, ms: Date.now() - t0 };
+  cache[k] = THREADS ? { raw: j.response, ms: Date.now() - t0, threads: THREADS } : { raw: j.response, ms: Date.now() - t0 };
   if (++dirty >= 10) save();
   return { ...cache[k], cached: false };
 }

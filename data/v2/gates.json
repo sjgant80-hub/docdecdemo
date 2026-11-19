@@ -1,0 +1,96 @@
+{
+ "witness": "v0.6",
+ "files": {
+  "src/late.mjs": {
+   "total": 38,
+   "killed": 38,
+   "survived": 0,
+   "ignored": 0,
+   "clean": true
+  },
+  "src/gate.mjs": {
+   "total": 61,
+   "killed": 61,
+   "survived": 0,
+   "ignored": 0,
+   "clean": true
+  },
+  "src/graph.mjs": {
+   "total": 47,
+   "killed": 47,
+   "survived": 0,
+   "ignored": 0,
+   "clean": true
+  },
+  "src/memory.mjs": {
+   "total": 54,
+   "killed": 54,
+   "survived": 0,
+   "ignored": 0,
+   "clean": true
+  },
+  "src/stats.mjs": {
+   "total": 23,
+   "killed": 23,
+   "survived": 0,
+   "ignored": 0,
+   "clean": true
+  },
+  "src/hyper.mjs": {
+   "total": 14,
+   "killed": 14,
+   "survived": 0,
+   "ignored": 0,
+   "clean": true
+  },
+  "src/conduct.mjs": {
+   "total": 8,
+   "killed": 8,
+   "survived": 0,
+   "ignored": 0,
+   "clean": true
+  },
+  "src/cost.mjs": {
+   "total": 18,
+   "killed": 18,
+   "survived": 0,
+   "ignored": 0,
+   "clean": true
+  },
+  "src/measure.mjs": {
+   "total": 129,
+   "killed": 129,
+   "survived": 0,
+   "ignored": 0,
+   "clean": true
+  },
+  "src/assemble.mjs": {
+   "total": 11,
+   "killed": 11,
+   "survived": 0,
+   "ignored": 0,
+   "clean": true
+  },
+  "src/publish.mjs": {
+   "total": 20,
+   "killed": 20,
+   "survived": 0,
+   "ignored": 0,
+   "clean": true
+  },
+  "src/examples.mjs": {
+   "total": 29,
+   "killed": 29,
+   "survived": 0,
+   "ignored": 0,
+   "clean": true
+  },
+  "src/wordpiece.mjs": {
+   "total": 24,
+   "killed": 24,
+   "survived": 0,
+   "ignored": 0,
+   "clean": true
+  }
+ }
+}

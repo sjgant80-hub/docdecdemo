@@ -3,7 +3,7 @@
 // call in the engine, and the price lock matches what the cost case reads.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, statSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 const root = new URL('../', import.meta.url);
@@ -11,7 +11,9 @@ const html = readFileSync(new URL('index.html', root), 'utf8');
 
 function standInDom() {
   const els = new Map();
-  const ids = [...html.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]);
+  // the ids in the HTML, plus the ones page.mjs creates inside its own markup (the as-of buttons, the fresh view)
+  const own = readFileSync(new URL('page.mjs', root), 'utf8');
+  const ids = [...new Set([...html.matchAll(/\sid="([^"]+)"/g), ...own.matchAll(/\sid="([^"$]+)"/g)].map((m) => m[1]))];
   const mk = (id) => {
     const el = { id, innerHTML: '', textContent: '', hidden: false, disabled: false, className: '', value: id === 'vol' ? '10000' : '', checked: id === 'checkOn',
       listeners: {}, addEventListener(t, f) { (this.listeners[t] = this.listeners[t] || []).push(f); }, set onclick(f) { this.listeners.click = [f]; }, get onclick() { return (this.listeners.click || [])[0]; },
@@ -53,6 +55,16 @@ test('every in-page link has its target; every local file the page names exists'
   const ids = new Set([...html.matchAll(/\sid="([^"]+)"/g)].map((m) => m[1]));
   for (const m of html.matchAll(/href="#([^"]+)"/g)) assert.ok(ids.has(m[1]), '#' + m[1]);
   for (const m of html.matchAll(/(?:href|src)="([^"#:]+)"/g)) assert.ok(existsSync(new URL(m[1], root)), m[1]);
+});
+
+test('the download size the page states is the real size of the files the re-run downloads', () => {
+  const s = JSON.parse(readFileSync(new URL('data/v2/sizes.json', root), 'utf8')).rerun;
+  const worker = readFileSync(new URL('rerun2-worker.mjs', root), 'utf8');
+  let total = 0;
+  for (const [f, b] of Object.entries(s.files)) { assert.equal(statSync(new URL('data/v2/' + f, root)).size, b, f); total += b; }
+  assert.equal(s.total, total);
+  for (const m of worker.matchAll(/'data\/v2\/([a-z0-9-]+)\.json'/g)) assert.ok(m[1] + '.json' in s.files, m[1] + ' is downloaded but not counted');
+  for (const n of worker.match(/names = \[([^\]]+)\]/)[1].match(/'([^']+)'/g).map((x) => x.slice(1, -1))) assert.ok(n + '.json' in s.files, n + ' is downloaded but not counted');
 });
 
 test('the engine makes no network calls: no fetch, XMLHttpRequest, WebSocket or http import in src/', () => {

@@ -201,14 +201,15 @@ footer{padding-block:28px 48px;border-top:1px solid var(--line);color:var(--mute
 
 <section id="how">
   <h2>How it works</h2>
-  <p>Five layers. Plain vector search becomes the first, cheapest step. It narrows thousands of passages to a shortlist in
-  milliseconds, and everything after it is about making the answer trustworthy.</p>
+  <p>Five layers. In the measured system, late interaction scores every passage, and everything after it is about making the
+  answer trustworthy. On a very large corpus, plain vector search can become the cheapest first step instead: a shortlist that late
+  interaction then re-ranks. Whether that shortlist loses answers is measured too, in the conductor table below, not assumed.</p>
   <div class="card diagram" aria-label="how a question flows through DocDec">
     <svg viewBox="0 0 980 300" role="img" aria-labelledby="dgT"><title id="dgT">A question flows through five layers: fast shortlist, late-interaction scoring, the graph walk for two-fact questions, the dated memory, and the verifier gate, which either answers with the exact words or refuses with a reason.</title>
       <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="currentColor"/></marker></defs>
       <g font-family="system-ui,Segoe UI,sans-serif" font-size="13" fill="currentColor" style="color:var(--ink)">
         <rect x="8" y="110" width="110" height="64" rx="10" fill="none" stroke="currentColor"/><text x="63" y="137" text-anchor="middle" font-weight="700">Question</text><text x="63" y="156" text-anchor="middle" font-size="11.5">from a person</text>
-        <rect x="150" y="96" width="130" height="92" rx="10" fill="none" stroke="currentColor"/><text x="215" y="120" text-anchor="middle" font-weight="700">L5 conductor</text><text x="215" y="140" text-anchor="middle" font-size="11.5">reads the shape:</text><text x="215" y="156" text-anchor="middle" font-size="11.5">one fact or two?</text><text x="215" y="172" text-anchor="middle" font-size="11.5">cosine shortlist</text>
+        <rect x="150" y="96" width="130" height="92" rx="10" fill="none" stroke="currentColor"/><text x="215" y="120" text-anchor="middle" font-weight="700">L5 conductor</text><text x="215" y="140" text-anchor="middle" font-size="11.5">reads the shape:</text><text x="215" y="156" text-anchor="middle" font-size="11.5">one fact or two?</text><text x="215" y="172" text-anchor="middle" font-size="11.5">then picks the route</text>
         <rect x="312" y="96" width="140" height="92" rx="10" fill="none" stroke="currentColor"/><text x="382" y="120" text-anchor="middle" font-weight="700">L1 late interaction</text><text x="382" y="140" text-anchor="middle" font-size="11.5">every word finds its</text><text x="382" y="156" text-anchor="middle" font-size="11.5">best match; the weakest</text><text x="382" y="172" text-anchor="middle" font-size="11.5">match is the evidence</text>
         <rect x="484" y="20" width="140" height="74" rx="10" fill="none" stroke="currentColor"/><text x="554" y="44" text-anchor="middle" font-weight="700">L2 graph walk</text><text x="554" y="63" text-anchor="middle" font-size="11.5">two-fact questions:</text><text x="554" y="79" text-anchor="middle" font-size="11.5">follow the mention</text>
         <rect x="484" y="196" width="140" height="74" rx="10" fill="none" stroke="currentColor"/><text x="554" y="220" text-anchor="middle" font-weight="700">L3 dated memory</text><text x="554" y="239" text-anchor="middle" font-size="11.5">only versions valid</text><text x="554" y="255" text-anchor="middle" font-size="11.5">on the asked date</text>
@@ -259,7 +260,7 @@ footer{padding-block:28px 48px;border-top:1px solid var(--line);color:var(--mute
   the threshold searches, every gate decision, the graph walk, the memory, the significance tests and the example picks. It then
   compares its result with what is published, field by field. <b>Quick</b> uses the shipped score tables. <b>Full</b> first re-scores
   the guild corpus, the off-topic set, the fresh set and the paraphrases from the shipped vectors, a few minutes of work in a background thread.</p>
-  <div class="row"><button id="rerunQuick" type="button">Re-run (quick)</button><button id="rerunFull" class="ghost" type="button">Re-run (full, from vectors)</button></div>
+  <div class="row"><button id="rerunQuick" type="button">Re-run (quick)</button><button id="rerunFull" class="ghost" type="button">Re-run (full, from vectors)</button><span id="rerunSize" class="small muted"></span></div>
   <div class="card" id="rerunOut" hidden style="margin-top:12px"></div>
   <details class="card"><summary>Re-run it from scratch on your own machine (the encoders and the reader too)</summary>
   <p>The page cannot run the reader model or re-encode the large corpora, but you can. Everything below runs on your own computer;
@@ -271,8 +272,8 @@ npm install                         # transformers.js (tokenizer), onnxruntime-n
 #   HotpotQA distractor validation parquet   https://huggingface.co/datasets/hotpotqa/hotpot_qa
 # and the ColBERT model files in bench/models/answerai-colbert-small-v1/ (model_int8.onnx + tokenizer)
 ollama pull nomic-embed-text && ollama pull qwen2.5:7b
-node build-sets.mjs && node encode.mjs && node score.mjs
-node read-jobs.mjs p1 && node encode-extra.mjs && node export.mjs && node read-jobs.mjs p2 && node read-jobs.mjs needs && node export.mjs</pre>
+node build-sets.mjs && node encode.mjs   # the sets, then the ColBERT and nomic encodings
+bash pipeline.sh                         # scores, the reader calls, the measurement, speed, browser parity</pre>
   <p class="small muted">The reader's outputs depend on the model build, so they are shipped. Every number on this page is re-derived
   from shipped data on every push by GitHub's servers (the CI gate), and the encoders' outputs can be re-made with the commands above.</p>
   </details>

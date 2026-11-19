@@ -1,6 +1,7 @@
 // page.mjs — renders DocDec v2's page from the shipped record. Every number on the page comes from data/v2/record.json
 // (or the cost kernel run on data/prices.lock.json + data/v2/measured.json); none is typed into the HTML.
 import K from './src/cost.mjs';
+import { passMatched, passFresh, passCache } from './src/measure.mjs';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -21,15 +22,31 @@ window.__record = R;
 const C = R.claims;
 
 // ── hero badges + the guild line ──
-const passN = Object.values(C).filter((c) => c.pass).length, n = Object.keys(C).length;
-$('badges').innerHTML = `<span class="badge ok">${passN} of ${n} claims pass their pre-registered rule</span>` +
+const c8pass = !!(MEAS && MEAS.c8 && MEAS.c8.pass === true);
+const passN = Object.values(C).filter((c) => c.pass).length + (MEAS ? (c8pass ? 1 : 0) : 0), n = Object.keys(C).length + (MEAS ? 1 : 0);
+$('badges').innerHTML = `<span class="badge ${passN === n ? 'ok' : ''}">${passN} of ${n} claims pass their pre-registered rule</span>` +
   Object.entries(C).map(([k, c]) => `<span class="badge ${c.pass ? 'ok' : 'no'}">${k} ${c.pass ? 'pass' : 'fail'}</span>`).join('') +
+  (MEAS ? `<span class="badge ${c8pass ? 'ok' : 'no'}">C8 ${c8pass ? 'pass' : 'fail'}</span>` : '') +
   '<span class="badge">runs offline on a laptop CPU</span><span class="badge">re-run every number in your browser</span>';
 if (R.v1) $('v1line').innerHTML = `DocDec v1 at its own published setting got <b>${pct(R.v1.accuracy)}</b> of the held-out decisions right (refused ${pct(R.v1.v1Refusal)} of unanswerable questions, answered ${pct(R.v1.v1Recall)} of answerable ones right); the tuned-cosine baseline got <b>${pct(R.v1.baseline)}</b> (refused ${pct(R.v1.baselineRefusal)}, answered ${pct(R.v1.baselineRecall)} right); ${R.v1.test.aOnly} questions went v1's way and ${R.v1.test.bOnly} the baseline's (${p(R.v1.test)}). ${R.v1.accuracy <= R.v1.baseline || R.v1.test.p >= 0.05 ? 'The finding holds: v1 did not beat the baseline.' : 'On this re-run v1 came out ahead; the finding is shown as measured.'}`;
 
 // ── the claims board ──
-const row = (k, cells) => `<tr><td><b>${k}</b> ${esc(C[k].claim)}</td>${cells}<td>${tag(C[k].pass)}</td></tr>`;
 const d = (k) => C[k].detail;
+// the bars, read from the pre-registered pass rules themselves (src/measure.mjs), never retyped here
+const scan = (ok) => { let last = null; for (let i = 0; i <= 1000; i++) if (ok(i / 1000)) last = i / 1000; return last; };
+const BAR = { recallGap: scan((g) => passMatched(true, 0.5 - g, 0.5)), fresh: 1 - scan((g) => passFresh(1 - g, 1, true)),
+  falseServe: scan((f) => passCache({ bar: 1, warm: 1, cold: 0, falseServeRate: f, served: 1, staleServed: 0 })) };
+const pts = (x) => (100 * x).toFixed(1) + ' points';
+// one line per failed claim: which part of its rule failed, from the record
+const WHY = {
+  C2: (x) => (!x.a.pass ? 'Decision accuracy did not beat the baseline.' : x.b && x.b.v2Recall !== undefined ? `Safer, but over the line: it refuses ${pct(x.b.v2Refusal)} of unanswerable questions against the baseline's ${pct(x.b.baselineRefusal)}, and answers ${pts(x.b.baselineRecall - x.b.v2Recall)} fewer answerable ones right; the rule allowed ${pts(BAR.recallGap)}.` : esc(x.b && x.b.why)),
+  C5: () => { const s = R.s4, miss = s.n - s.retrieval.latestMemory; return `Retrieval, not staleness: as of today only current versions are in its index, so it never served an old one. In ${miss} of ${s.n} cases it picked a different paragraph altogether, so it returned the current version ${pct(d('C5').latestMemory)} of the time against a bar of ${pct(BAR.fresh)}${d('C5').history < BAR.fresh ? `, and the as-of-2021 read missed the same way (${pct(d('C5').history)})` : ''}.`; },
+  C7: (x) => { const f = []; if (!(x.warmAccuracy >= x.coldAccuracy)) f.push(`with the memory it was slightly less accurate (${pct(x.warmAccuracy)} against ${pct(x.coldAccuracy)})`);
+    if (!(x.falseServeRate <= BAR.falseServe)) f.push(`it gave stored answers to ${pct(x.falseServeRate)} of unanswerable reworded questions (the bar was ${pct(BAR.falseServe)})`);
+    if (!(x.readerCallsSaved > 0)) f.push('it saved no reader calls'); if (x.staleServed !== 0) f.push(`it served ${x.staleServed} stale answers`);
+    return `The memory does not earn its place yet: ${f.join('; ')}. It did save ${x.readerCallsSaved} reader calls and served no stale answer.`; },
+};
+const row = (k, cells) => `<tr><td><b>${k}</b> ${esc(C[k].claim)}${!C[k].pass && WHY[k] ? `<br><span class="small muted">${WHY[k](d(k))}</span>` : ''}</td>${cells}<td>${tag(C[k].pass)}</td></tr>`;
 const rows = [
   row('C1', `<td>right passage first: ${pct(d('C1').s1.colbert)} (guild corpus), ${pct(d('C1').s2.colbert)} (9x corpus)</td><td>${pct(d('C1').s1.cosine)}, ${pct(d('C1').s2.cosine)}</td><td>${p(d('C1').s1.test)}; ${p(d('C1').s2.test)}</td>`),
   row('C2', `<td>decisions right ${pct(d('C2').a.v2)}; at the baseline's recall, refuses ${pct(d('C2').b.v2Refusal)} of unanswerable (recall ${pct(d('C2').b.v2Recall)})</td><td>${pct(d('C2').a.baseline)}; refuses ${pct(d('C2').b.baselineRefusal)} (recall ${pct(d('C2').b.baselineRecall)})</td><td>${p(d('C2').a.test)}; ${p(d('C2').b.test)}</td>`),
@@ -39,9 +56,17 @@ const rows = [
   row('C6', `<td>${d('C6').verbatim} of ${d('C6').audited} answers found word for word at their offsets</td><td>a cloud RAG gives no offsets to check</td><td>exact count</td>`),
   row('C7', `<td>right ${pct(d('C7').warmAccuracy)} with memory, ${d('C7').readerCallsSaved} reader calls saved, ${pct(d('C7').falseServeRate)} false serves, ${d('C7').staleServed} stale serves</td><td>without memory: ${pct(d('C7').coldAccuracy)}</td><td>pass rule: no worse, false serves at most 1%, no stale serve</td>`),
 ];
-const sp = MEAS ? `<tr><td><b>C8</b> Sovereign and cheap</td><td>${esc(MEAS.network)}; about ${MEAS.localSecondsPerQuestion} s a question on a ${esc(MEAS.machine.cpu)}</td><td>a cloud API call per question</td><td>measured on one machine</td><td>${tag(true)}</td></tr>` : '';
+// C8 is decided by the speed run's own record (bench/latency.mjs): every outgoing connection it opened, and its medians
+const c8 = MEAS && MEAS.c8 ? MEAS.c8 : null;
+const netLine = (nw) => { if (!nw || !Array.isArray(nw.connections)) return 'connections not recorded';
+  const total = nw.connections.reduce((a, [, k]) => a + k, 0), hosts = nw.connections.map(([h]) => esc(h)).join(', ');
+  if (nw.outside.length) return `connections left the machine: ${nw.outside.map(esc).join(', ')}`;
+  return total === 1 ? `its one network connection went to this machine (${hosts}) and was reused for every call`
+    : `all ${total} of its network connections went to this machine (${hosts})`; };
+const sp = MEAS ? `<tr><td><b>C8</b> Sovereign and cheap</td><td>${netLine(MEAS.network)}; about ${MEAS.localSecondsPerQuestion} s a question on a ${esc(MEAS.machine.cpu)}${MEAS.conditions && !MEAS.conditions.quiet ? ', timed while other jobs shared the machine (see the speed table)' : ''}</td><td>a cloud API call per question</td><td>connections recorded on one machine</td><td>${tag(c8 !== null && c8.pass === true)}</td></tr>` : '';
 $('claimsTbl').querySelector('tbody').innerHTML = rows.join('') + sp;
-$('claimsNote').textContent = `Held-out questions: ${R.splits.s1.eval} on the guild corpus (its first ${R.splits.s1.tune} tuned every setting), ${R.s3.eval} multi-hop, ${R.s4.n} changed facts. ${R.complete ? 'Every reader call the measurement needed was made.' : 'Some reader calls were missing when this record was made; the affected numbers count them as refusals.'}`;
+$('claimsNote').textContent = `Held-out questions: ${R.splits.s1.eval} on the guild corpus (its first ${R.splits.s1.tune} tuned every setting), ${R.s3.eval} multi-hop, ${R.s4.n} changed facts. ${R.complete ? 'Every reader call the measurement needed was made.' : 'Some reader calls were missing when this record was made; the affected numbers count them as refusals.'}` +
+  (R.sources && R.sources.readerThreads ? ` The reader (${R.sources.reader}, temperature ${R.sources.readerOptions.temperature}, seed ${R.sources.readerOptions.seed}) ran on CPU; its answers by thread count, a speed setting only: ${Object.entries(R.sources.readerThreads).map(([t, k]) => `${k} at ${t === 'Ollama default (6 on this laptop)' ? 'the default 6 threads' : t + ' threads'}`).join(', ')}.` : '');
 
 // ── examples ──
 const E = R.examples;
@@ -119,8 +144,17 @@ $('freshTbl').innerHTML = `<tr><th>Of ${f4.n} changed facts</th><th class="num">
 $('memTbl').innerHTML = R.s5 ? `<tr><th>Measure</th><th class="num">Value</th></tr><tr><td>Facts remembered from use</td><td class="num">${R.s5.remembered}</td></tr><tr><td>Match bar (chosen on tune)</td><td class="num">${R.s5.threshold ?? 'none qualified: memory off'}</td></tr><tr><td>Held-out paraphrases served from memory</td><td class="num">${R.s5.served} of ${R.s5.eval}</td></tr><tr><td>Right with memory / without</td><td class="num">${R.s5.warmRight} / ${R.s5.coldRight}</td></tr><tr><td>False serves / stale serves</td><td class="num">${R.s5.falseServes} / ${R.s5.staleServed}</td></tr>` : '';
 $('condTbl').innerHTML = `<tr><th>Measure</th><th class="num">Value</th></tr><tr><td>One-fact questions read as one fact (guild corpus)</td><td class="num">${pct(R.l5.routing.lookupReadAsLookup)} of ${R.l5.routing.lookupN}</td></tr><tr><td>Two-fact questions read as two facts (HotpotQA)</td><td class="num">${pct(R.l5.routing.compositionalReadAsCompositional)} of ${R.l5.routing.compositionalN}</td></tr>
   <tr><td>Right passage first: full late interaction over all ${esc(R.l5.fastPath.corpus)}</td><td class="num">${pct(R.l5.fastPath.fullColbertTop1)}</td></tr><tr><td>Right passage first: cosine shortlist of 20, then late interaction</td><td class="num">${pct(R.l5.fastPath.shortlist20ThenColbert)}</td></tr>`;
+// what else shared the local model during the timing run (recorded by bench/latency.mjs), said plainly
+function speedConditions(k) {
+  if (!k) return '';
+  if (k.quiet) return ' Nothing else was using the local model during the run.';
+  const bits = [];
+  if (k.otherModelsLoaded.length) bits.push(`other jobs had ${k.otherModelsLoaded.map(esc).join(', ')} loaded on the same model server`);
+  if (k.readerReloads) bits.push(`the reader had to be reloaded ${k.readerReloads} time${k.readerReloads === 1 ? '' : 's'}`);
+  return ` Not a quiet machine: ${bits.join(', and ')}. These times are slower than the same laptop with nothing else running, and the cost below uses them as measured.`;
+}
 $('speedTbl').innerHTML = MEAS ? `<tr><th>Step (median of ${MEAS.n} questions)</th><th class="num">ms</th></tr>` + Object.entries({ colbertEncodeQuestion: 'encode the question (ColBERT)', cosineOver1204: 'cosine over 1,204 passages', maxsimOver130: 'late interaction over 130 passages', maxsimOver1204: 'late interaction over 1,204 passages', graphWalk: 'graph walk (multi-hop)', reader: 'the reader (7B, CPU)' }).map(([k, l]) => `<tr><td>${l}</td><td class="num">${MEAS.medianMs[k]}</td></tr>`).join('') +
-  `<tr><td colspan="2" class="small muted">${esc(MEAS.machine.cpu)}, ${MEAS.machine.cores} threads, ${MEAS.machine.memoryGb} GB, ${esc(MEAS.machine.gpu)}. The reader read ${MEAS.readerTokens.promptMean} tokens and wrote ${MEAS.readerTokens.outputMean} on average.</td></tr>` : '<tr><td>Not measured yet.</td></tr>';
+  `<tr><td colspan="2" class="small muted">${esc(MEAS.machine.cpu)}, ${MEAS.machine.cores} threads, ${MEAS.machine.memoryGb} GB, ${esc(MEAS.machine.gpu)}. The reader read ${MEAS.readerTokens.promptMean} tokens and wrote ${MEAS.readerTokens.outputMean} on average.${speedConditions(MEAS.conditions)}</td></tr>` : '<tr><td>Not measured yet.</td></tr>';
 
 // ── the frontier ──
 $('h1Out').innerHTML = R.h1 ? `<p>Index: ${R.h1.nodes.article} article nodes, ${R.h1.nodes.paragraph} paragraphs, ${R.h1.nodes.sentence} sentences. On ${R.h1.n} held-out answerable questions, the first result held the answer: cosine ${pct(R.h1.rank1AnswerBearing.cosine)}, hyperbolic ${pct(R.h1.rank1AnswerBearing.hyperbolic)}, fused ${pct(R.h1.rank1AnswerBearing.fused)} (${p(R.h1.test)}).
@@ -164,7 +198,7 @@ $('board').innerHTML = `<ul><li><b>Trust.</b> ${passN} of ${n} pre-registered cl
   <li><b>Proof you can repeat.</b> Every number re-derives in a browser from the shipped data, and from scratch on any machine with the published commands.</li></ul>`;
 
 // ── paper results + limits ──
-$('paperResults').textContent = Object.entries(C).map(([k, c]) => `${k} ${c.pass ? 'passed' : 'failed'}`).join(', ') + (MEAS ? ', C8 measured' : '') + '.';
+$('paperResults').textContent = Object.entries(C).map(([k, c]) => `${k} ${c.pass ? 'passed' : 'failed'}`).join(', ') + (MEAS ? `, C8 ${c8pass ? 'passed' : 'failed'}` : '') + '.';
 const fails = Object.entries(C).filter(([, c]) => !c.pass).map(([k, c]) => `${k} (${c.claim.toLowerCase()})`);
 $('limitsDyn').textContent = fails.length ? `Failed claims, not made: ${fails.join('; ')}.` : 'Every pre-registered claim passed on these sets; that is a statement about these sets, not a guarantee on yours.';
 
@@ -181,5 +215,6 @@ function rerun(full) {
   w.onerror = (e) => { out.textContent = 'The re-run could not start: ' + e.message; $('rerunQuick').disabled = $('rerunFull').disabled = false; };
   w.postMessage({ full });
 }
+get('data/v2/sizes.json').then((s) => { $('rerunSize').textContent = `Either one downloads about ${Math.round(s.rerun.total / 1e6)} MB of shipped data first; on a phone, use Wi-Fi.`; }).catch(() => { /* size unknown: say nothing */ });
 $('rerunQuick').onclick = () => rerun(false);
 $('rerunFull').onclick = () => rerun(true);

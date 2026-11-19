@@ -1,6 +1,7 @@
 // bench/latency.mjs — C8: how long each part of DocDec takes on THIS machine (Intel Core i7-1255U laptop, CPU only,
 // 16 GB), and how many tokens the reader actually reads and writes. Run it on a quiet machine. Writes data/v2/measured.json.
 // These are machine measurements: not re-derivable from the shipped data, published as measured, with the machine named.
+import NET from './netlog.mjs'; // first: it records every outgoing connection from here on
 import { readFileSync, writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -33,6 +34,11 @@ function gen(prompt) {
   const body = JSON.stringify({ model: READER_MODEL, prompt, stream: false, options: { temperature: 0, seed: 99, num_ctx: 4096, num_predict: 48 } });
   return new Promise((ok, no) => { const r = request('http://127.0.0.1:11434/api/generate', { method: 'POST', headers: { 'content-type': 'application/json', 'content-length': Buffer.byteLength(body) } }, (res) => { let b = ''; res.on('data', (c) => (b += c)); res.on('end', () => ok(JSON.parse(b))); }); r.on('error', no); r.setTimeout(0); r.end(body); });
 }
+// recorded, not assumed: what else the local model server held during the run, and how often the reader had to be
+// reloaded (another job swapping its own model in). Either one slows the reader; the page says so when it happened.
+const loaded = () => new Promise((ok) => { const r = request('http://127.0.0.1:11434/api/ps', (res) => { let b = ''; res.on('data', (c) => (b += c)); res.on('end', () => { try { ok((JSON.parse(b).models || []).map((m) => m.name)); } catch { ok([]); } }); }); r.on('error', () => ok([])); r.end(); });
+const others = new Set((await loaded()).filter((m) => m !== READER_MODEL));
+let reloads = 0;
 for (const q of qs) {
   let t0 = performance.now(); const e = await encodeQuery(q.text); t.encode.push(performance.now() - t0);
   const qm = Float32Array.from(e.vecs.flat());
@@ -41,6 +47,8 @@ for (const q of qs) {
   const qv = nv(q.text); t0 = performance.now(); for (const v of fullN) L.cosine(qv, v); t.cosineS2.push(performance.now() - t0);
   t0 = performance.now(); const g = await gen(PROMPT_ONE(textOf.get(best), q.text)); t.reader.push(performance.now() - t0);
   t.promptTokens.push(g.prompt_eval_count); t.outputTokens.push(g.eval_count);
+  if (g.load_duration > 1e9) reloads++; // over a second loading means the model was not resident: something else ran
+  for (const m of await loaded()) if (m !== READER_MODEL) others.add(m);
 }
 const g = G.build(S.hot.paragraphs);
 const sc = J('scores.json');
@@ -50,8 +58,13 @@ const out = {
   machine: { cpu: os.cpus()[0].model.trim(), cores: os.cpus().length, memoryGb: Math.round(os.totalmem() / 2 ** 30), gpu: 'none used' }, n: N,
   medianMs: { colbertEncodeQuestion: med(t.encode), maxsimOver130: med(t.maxsimS1), maxsimOver1204: med(t.maxsimS2), cosineOver1204: med(t.cosineS2), graphWalk: med(t.walk), reader: med(t.reader) },
   readerTokens: { promptMean: mean(t.promptTokens), outputMean: mean(t.outputTokens), tokenizer: READER_MODEL + ' (its own tokenizer, as reported by Ollama)' },
-  network: 'every call above went to 127.0.0.1 (Ollama) or ran in this process; nothing left the machine',
+  // recorded, not asserted: every outgoing connection this run opened (bench/netlog.mjs), and which left the machine
+  network: NET.report(),
+  conditions: { otherModelsLoaded: [...others].sort(), readerReloads: reloads, quiet: others.size === 0 && reloads === 0 },
 };
+// C8's pass rule (PREREG): all inference on this machine, and a median published for every path
+out.c8 = { localOnly: out.network.localOnly, mediansPublished: Object.values(out.medianMs).every((x) => Number.isFinite(x) && x >= 0) };
+out.c8.pass = out.c8.localOnly && out.c8.mediansPublished;
 out.localSecondsPerQuestion = Math.round((out.medianMs.colbertEncodeQuestion + out.medianMs.maxsimOver1204 + out.medianMs.reader) / 100) / 10;
 writeFileSync(join(HERE, '..', 'data', 'v2', 'measured.json'), JSON.stringify(out, null, 1) + '\n');
 console.log(JSON.stringify(out, null, 1));

@@ -75,7 +75,9 @@ if (phase === 'p3') {
 }
 if (phase === 'needs') {
   // whatever bench/export.mjs found the measurement asking for and the cache not holding
-  const want = J('needs.json');
+  // sorted by prompt so calls on the same passage run back to back and the model reuses that prefix
+  // (order only: every answer is cached by its prompt, so the results are the same in any order)
+  const want = J('needs.json').slice().sort((a, b) => (a.prompt < b.prompt ? -1 : a.prompt > b.prompt ? 1 : 0));
   for (const w of want) await read(w.prompt);
   save(); console.log(`needs: ${want.length} reader calls filled`);
 }

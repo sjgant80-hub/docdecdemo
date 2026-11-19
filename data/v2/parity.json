@@ -1,0 +1,22 @@
+{
+ "runtime": "onnxruntime-web 1.31.0-dev.20260914-8d85527a0 (WebAssembly, one thread): the exact build the page loads",
+ "against": "onnxruntime-node 1.30.0, which encoded every published number",
+ "tokenizer": {
+  "texts": 2904,
+  "identical": 2904,
+  "firstMismatches": []
+ },
+ "vectors": {
+  "values": 3686400,
+  "identical": 3156868,
+  "maxDifference127ths": 6
+ },
+ "questions": 1200,
+ "sameTopPassage": 1184,
+ "sameGateDecision": 1191,
+ "maxScoreDifference": 0.003923,
+ "gateSetting": {
+  "t": 0.927045,
+  "e": 0.750759
+ }
+}
