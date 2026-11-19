@@ -179,11 +179,14 @@ function cost() {
   const measured = { inTokens: MEAS ? MEAS.readerTokens.promptMean : 0, outTokens: MEAS ? MEAS.readerTokens.outputMean : 0, localSeconds: MEAS ? MEAS.localSecondsPerQuestion : 0,
     passageWords: R.s1.v2.spans.passageWords, sentenceWords: R.s1.v2.spans.sentenceWords };
   const c = K.costCase(LOCK, measured, { questionsPerMonth: Number($('vol').value), watts: $('wattsLow').checked ? 'low' : 'high', check: $('checkOn').checked });
-  $('costTbl').innerHTML = `<tr><th>Setup</th><th class="num">Per question</th><th class="num">A month</th><th class="num">A year</th><th class="num">Next year (+CPI)</th></tr>` +
-    c.cloud.apis.map((a) => `<tr><td>Cloud: ${esc(a.provider)} ${esc(a.model)}${c.check ? ' + checking time' : ''}</td><td class="num">${gbp(a.perQuestionGbp)}</td><td class="num">${gbp(a.monthGbp)}</td><td class="num">${gbp(a.yearGbp)}</td><td class="num">${gbp(a.nextYearGbp)}</td></tr>`).join('') +
-    `<tr><td><b>DocDec on your machine</b>${c.check ? ' + checking time' : ''}</td><td class="num">${gbp(c.local.perQuestionGbp)}</td><td class="num"><b>${gbp(c.local.monthGbp)}</b></td><td class="num"><b>${gbp(c.local.yearGbp)}</b></td><td class="num">—</td></tr>`;
-  $('costNote').innerHTML = `Quantities measured here: the reader reads ${measured.inTokens} tokens and writes ${measured.outTokens} a question, about ${measured.localSeconds} s of a laptop CPU at ${c.watts} W.
-    ${c.check ? `Checking an answer means reading what it cites: the whole passage (${measured.passageWords} words, ${c.checkMinutes.cloud.toFixed(2)} min) for a chunk-citing cloud setup, the one cited sentence (${measured.sentenceWords} words, ${c.checkMinutes.docdec.toFixed(2)} min) for DocDec, at the reading rate and wage in the lock.` : ''}
+  // per-question amounts are fractions of a penny: shown in pence to two significant figures, never rounded to £0.0000
+  const perQ = (x) => (typeof x !== 'number' ? 'n/a' : x >= 0.01 ? gbp(x) : x === 0 ? '0p' : `${Number((x * 100).toPrecision(2))}p`);
+  const q = c.questionsPerMonth;
+  $('costTbl').innerHTML = `<tr><th>Setup</th><th class="num">Model or electricity, per question</th>${c.check ? '<th class="num">With checking, per question</th>' : ''}<th class="num">A month</th><th class="num">A year</th><th class="num">Next year (+CPI)</th></tr>` +
+    c.cloud.apis.map((a) => `<tr><td>Cloud: ${esc(a.provider)} ${esc(a.model)}${c.check ? ' + checking time' : ''}</td><td class="num">${perQ(a.perQuestionGbp)}</td>${c.check ? `<td class="num">${perQ(a.monthGbp / q)}</td>` : ''}<td class="num">${gbp(a.monthGbp)}</td><td class="num">${gbp(a.yearGbp)}</td><td class="num">${gbp(a.nextYearGbp)}</td></tr>`).join('') +
+    `<tr><td><b>DocDec on your machine</b>${c.check ? ' + checking time' : ''}</td><td class="num">${perQ(c.local.perQuestionGbp)}</td>${c.check ? `<td class="num">${perQ(c.local.monthGbp / q)}</td>` : ''}<td class="num"><b>${gbp(c.local.monthGbp)}</b></td><td class="num"><b>${gbp(c.local.yearGbp)}</b></td><td class="num">—</td></tr>`;
+  $('costNote').innerHTML = `Quantities measured here: the reader reads ${measured.inTokens} tokens and writes ${measured.outTokens} a question, about ${measured.localSeconds} s of a laptop CPU at ${c.watts} W${MEAS && MEAS.conditions && !MEAS.conditions.quiet ? ' (timed while other jobs shared the laptop, so the electricity here is on the high side)' : ''}.
+    ${c.check ? `Checking an answer means reading what it cites: the whole passage (${measured.passageWords.toFixed(0)} words on average, ${c.checkMinutes.cloud.toFixed(2)} min) for a chunk-citing cloud setup, the one cited sentence (${measured.sentenceWords.toFixed(0)} words, ${c.checkMinutes.docdec.toFixed(2)} min) for DocDec, at the reading rate and wage in the lock. Most of either bill is that reading time.` : ''}
     Not counted, all on the cloud side: ${c.notCounted.map(esc).join('; ')}.`;
   return c;
 }

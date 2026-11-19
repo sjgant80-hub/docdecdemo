@@ -259,7 +259,8 @@ footer{padding-block:28px 48px;border-top:1px solid var(--line);color:var(--mute
   <p>Press the button and your browser downloads the shipped data and re-derives every number on this page with the same code:
   the threshold searches, every gate decision, the graph walk, the memory, the significance tests and the example picks. It then
   compares its result with what is published, field by field. <b>Quick</b> uses the shipped score tables. <b>Full</b> first re-scores
-  the guild corpus, the off-topic set, the fresh set and the paraphrases from the shipped vectors, a few minutes of work in a background thread.</p>
+  the guild corpus, the off-topic set, the fresh set and the paraphrases from the shipped vectors: several minutes of work in a background
+  thread (11 minutes on our test laptop while it was busy with other jobs; quick took from 10 seconds to 4 minutes there, depending on that load).</p>
   <div class="row"><button id="rerunQuick" type="button">Re-run (quick)</button><button id="rerunFull" class="ghost" type="button">Re-run (full, from vectors)</button><span id="rerunSize" class="small muted"></span></div>
   <div class="card" id="rerunOut" hidden style="margin-top:12px"></div>
   <details class="card"><summary>Re-run it from scratch on your own machine (the encoders and the reader too)</summary>
@@ -302,7 +303,10 @@ bash pipeline.sh                         # scores, the reader calls, the measure
     <div class="card"><h3>Finance</h3><p>No per-question API bill and no per-seat AI subscription for this job. The comparison below is
     computed from sourced, dated list prices and your own volume. The running cost is electricity on machines you already have.</p></div>
     <div class="card"><h3>Operations</h3><p>Answers come with the exact sentence, so checking one takes seconds instead of re-reading
-    a page. When a policy changes, the new version supersedes the old one on its date, and nobody is told the old rule.</p></div>
+    a page. When a policy changes, the new version supersedes the old one on its date and the old rule is not served (none was in
+    the measurement; it can still pick the wrong paragraph, which is why claim C5 fails).</p>
+    <p><b>What your people still do:</b> read the cited sentence before acting on an answer (that time is counted in the cost below),
+    answer the questions it refuses, and fill the gaps the refusal log lists. It removes the searching and the re-reading, not the judgement.</p></div>
     <div class="card"><h3>Technology and security</h3><p>Runs offline on CPU: a 34 MB token-matching model and a 7-billion-parameter
     local reader. No document, question or answer is sent to any vendor. Pure modules, mutation-tested, MIT-licensed: you can read,
     run and keep all of it.</p></div>
@@ -414,7 +418,8 @@ bash pipeline.sh                         # scores, the reader calls, the measure
       <li>The paraphrases were written by the local model, not by people.</li>
       <li>The reader is a 7-billion-parameter model on a laptop CPU. A larger local model may read better; its numbers would have to be measured, not assumed.</li>
       <li>The hyperbolic prototype is training-free. A trained version is the published idea; we have not built or measured one.</li>
-      <li>The speed figures were measured on one laptop. Yours will differ.</li>
+      <li>The speed figures were measured on one laptop, and the speed table says whether other jobs were sharing it at the time. Yours will differ.</li>
+      <li>The in-browser re-run was checked identical, quick and full, in Chrome. In another browser the button reports any field that differs; it never hides one.</li>
       <li id="limitsDyn"></li>
     </ul>
   </div>
