@@ -286,6 +286,12 @@ bash pipeline.sh                         # scores, the reader calls, the measure
   operator at a time (&lt; to &lt;=, &amp;&amp; to ||, and so on) and the tests must catch every change. A change the tests miss is
   a line nobody really checked.</p>
   <div class="tbl card"><table id="bpTbl"><thead><tr><th>Part</th><th>File</th><th>What it does</th><th class="num">Mutation gate</th></tr></thead><tbody></tbody></table></div>
+  <p class="small">DocDec also carries the <a href="https://sjgant80-hub.github.io/estate-genome/">estate genome</a>: a
+  <a href="seed.json"><code>seed.json</code></a> that says what it is and what it takes, and <code>genome/</code> hooks that a
+  birth check runs on every push. Its judge is the audit above (claim C6). Its lane is a word-overlap check against the index,
+  so an agent can tell before asking whether a question is one DocDec covers. On held-out questions the lane takes
+  <span id="laneIn">…</span> of on-topic questions and turns away <span id="laneOut">…</span> of off-topic ones
+  (<a href="data/genome-lane.json">the measurement</a>).</p>
 </section>
 
 <section id="business">

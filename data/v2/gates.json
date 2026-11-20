@@ -91,6 +91,20 @@
    "survived": 0,
    "ignored": 0,
    "clean": true
+  },
+  "genome/cell.mjs": {
+   "total": 17,
+   "killed": 17,
+   "survived": 0,
+   "ignored": 0,
+   "clean": true
+  },
+  "genome/lane-share.mjs": {
+   "total": 8,
+   "killed": 8,
+   "survived": 0,
+   "ignored": 0,
+   "clean": true
   }
  }
 }

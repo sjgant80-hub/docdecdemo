@@ -171,7 +171,10 @@ const BP = [['L1 late interaction', 'src/late.mjs', 'MaxSim: every question word
   ['Significance', 'src/stats.mjs', 'exact two-sided McNemar'],
   ['Cost case', 'src/cost.mjs', 'this against that, from the price lock and the measurements'],
   ['Frontier', 'src/hyper.mjs', 'Poincaré ball, radius by depth, fusion (prototype only)'],
-  ['Examples', 'src/examples.mjs', 'the fixed rules that pick every example on this page']];
+  ['Examples', 'src/examples.mjs', 'the fixed rules that pick every example on this page'],
+  ['Genome', 'genome/cell.mjs', 'the birth-check hooks: the judge is the C6 audit; the lane is word overlap with the index'],
+  ['Genome lane', 'genome/lane-share.mjs', 'the lane share, chosen on tune questions and measured on held-out ones']];
+fetch('data/genome-lane.json').then((r) => r.json()).then((L) => { const pc = (x) => `${(x * 100).toFixed(1)}%`; $('laneIn').textContent = pc(L.eval.inLaneAccepted); $('laneOut').textContent = pc(L.eval.offTopicRefused); }).catch(() => {});
 $('bpTbl').querySelector('tbody').innerHTML = BP.map(([n2, f, w]) => { const g = GATES && GATES.files ? GATES.files[f] : null; return `<tr><td><b>${esc(n2)}</b></td><td><a href="${f}"><code>${f}</code></a></td><td>${esc(w)}</td><td class="num">${g ? `${g.killed}/${g.total}${g.clean ? ' clean' : ''}` : '—'}</td></tr>`; }).join('');
 
 // ── the cost case ──
