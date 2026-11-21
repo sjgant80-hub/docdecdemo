@@ -23,8 +23,8 @@
    "clean": true
   },
   "src/memory.mjs": {
-   "total": 54,
-   "killed": 54,
+   "total": 82,
+   "killed": 82,
    "survived": 0,
    "ignored": 0,
    "clean": true

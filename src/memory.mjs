@@ -6,13 +6,15 @@
 // On top of the versions it keeps what USE teaches: verified answers (each with its source, version and span,
 // consolidated when many people ask the same thing), the questions it refused (the gaps), and a metabolism that lets
 // unused cached answers fade and prunes them, while the source versions — the provenance — are never pruned.
+// Beside those answers it can keep the WORK behind each one (keep / nearest / recheck / holds, at the end), reused for
+// a new question only after the grounding checks pass again for that question.
 
 const str = (x) => (typeof x === 'string' ? x : '');
 const arr = (x) => (Array.isArray(x) ? x : []);
 const fin = (x) => (typeof x === 'number' && Number.isFinite(x));
 const day = (iso) => { const t = Date.parse(str(iso)); return fin(t) ? t / 86400000 : NaN; };
 
-export function createStore() { return { versions: [], facts: [], gaps: [] }; }
+export function createStore() { return { versions: [], facts: [], gaps: [], work: [] }; }
 
 // shingles(text, k) → the set of k-word shingles (lowercased words)
 export function shingles(text, k) {
@@ -130,4 +132,63 @@ export function metabolise(store, now, opts, findSpan) {
   return { kept: keep.length, pruned };
 }
 
-export default { createStore, shingles, jaccard, NEAR_DUPLICATE, current, ingest, validAt, history, remember, reground, refused, weight, metabolise };
+// ── C7b (PREREG §7): keep the WORK behind an answer, not the answer ──
+// The facts above store a CONCLUSION and serve it to any question that looks like the one it answered (claim C7, which
+// failed). The functions below keep what was computed for a question instead: the passage and version it chose, its
+// late-interaction score and evidence, the reader's raw output, and the answer span at its offsets. That work is reused
+// for a NEW question only after the grounding checks pass again for that question, against the current source.
+
+// keep(store, w) — w: { qid, question, sourceId, versionId, score, weakest, weakestToken, raw, span: { start, end, text }, at }.
+// One record per question: keeping the same question again replaces its record. Returns the record, or null.
+export function keep(store, w) {
+  const span = w && w.span;
+  if (!store || !span || w.qid == null || w.sourceId == null || str(span.text).length === 0) return null;
+  const rec = { qid: w.qid, question: str(w.question), sourceId: w.sourceId, versionId: w.versionId, score: w.score, weakest: w.weakest,
+    weakestToken: w.weakestToken, raw: str(w.raw), span: { start: span.start, end: span.end, text: span.text }, at: w.at };
+  if (!Array.isArray(store.work)) store.work = [];
+  const i = store.work.findIndex((x) => x.qid === rec.qid);
+  if (i < 0) store.work.push(rec); else store.work[i] = rec;
+  return rec;
+}
+
+// nearest(store, ranked) → { work, score } for the best-ranked remembered question that has kept work, or null.
+// ranked: [[qid, score], ...] best first (the question-to-question match list)
+export function nearest(store, ranked) {
+  const work = arr(store && store.work);
+  for (const x of arr(ranked)) {
+    const w = Array.isArray(x) ? work.find((k) => k.qid === x[0]) : undefined;
+    if (w) return { work: w, score: x[1] };
+  }
+  return null;
+}
+
+// recheck(store, w, asOf, match, decide, opts) → reuse kept work w for a NEW question only if the grounding checks pass
+// again, for that question, against the version of w's source valid at asOf.
+//   match(version) → { score, weakest, weakestToken }: the NEW question against that one passage (retrieval's own
+//   arithmetic, on one passage instead of all of them). decide is the real gate (src/gate.mjs), run with opts (its bar
+//   and evidence bar) and the kept reader output in place of a new reader call, so checks 2, 3, 4 and 5 run for the new
+//   question; the reader check is always on. The span the gate finds must then be the kept span, at its offsets.
+// { ok: true, answer, version, span } or { ok: false, check, why }. Nothing is ever served without the gate's span check.
+const sameSpan = (a, b) => a.start === b.start && a.end === b.end && a.text === b.text;
+export function recheck(store, w, asOf, match, decide, opts) {
+  if (!w || !w.span) return { ok: false, check: null, why: 'nothing kept' };
+  const v = current(store, w.sourceId, asOf);
+  if (!v) return { ok: false, check: null, why: 'the source is no longer valid' };
+  const m = typeof match === 'function' ? match(v) : null;
+  if (!m || typeof decide !== 'function') return { ok: false, check: null, why: 'no way to re-check the new question' };
+  const d = decide({ id: v.id, text: v.text, score: m.score, weakest: m.weakest, weakestToken: m.weakestToken, reader: w.raw }, { ...opts, useReader: true })
+    || { refuse: true, check: null, why: 'the gate gave no decision' };
+  if (d.refuse === true) return { ok: false, check: d.check, why: d.why };
+  if (!d.span || !sameSpan(d.span, w.span)) return { ok: false, check: 'offsets', why: 'the kept answer is not at its offsets in the current version' };
+  return { ok: true, answer: w.sourceId, version: v.id, span: d.span };
+}
+
+// holds(store, w, asOf) → true while the version of w's source valid at asOf still holds w's span text at w's offsets.
+// false means the kept answer went stale: its source changed under it, or is gone.
+export function holds(store, w, asOf) {
+  const v = w ? current(store, w.sourceId, asOf) : null;
+  return v !== null && !!w.span && v.text.slice(w.span.start, w.span.end) === w.span.text;
+}
+
+export default { createStore, shingles, jaccard, NEAR_DUPLICATE, current, ingest, validAt, history, remember, reground, refused, weight, metabolise,
+  keep, nearest, recheck, holds };

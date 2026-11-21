@@ -177,3 +177,101 @@ test('refused / weight / metabolise: faded and stale answers pruned, versions ke
   M.remember(h, { qid: 'q', sourceId: 'v', span: 'abc', at: '2026-11-18' });
   assert.equal(M.metabolise(h, '2026-11-18', { minWeight: 2 }, G.findSpan).kept, 0, 'the keep line is read from the options');
 });
+
+// ── C7b: kept work, re-checked for each new question ──
+const AT = P1.indexOf('911');
+const WORK = { qid: 'q1', question: 'When was the duchy founded?', sourceId: 'n', versionId: 'n@1', score: 0.95, weakest: 0.8, weakestToken: 'founded',
+  raw: '911', span: { start: AT, end: AT + 3, text: '911' }, at: '2026-11-18' };
+const GOOD = () => ({ score: 0.95, weakest: 0.8, weakestToken: 'founded' });
+const BARS = { bar: 0.9, evidence: 0.7 };
+const withP1 = () => { const s = M.createStore(); M.ingest(s, { id: 'n@1', sourceId: 'n', text: P1, validFrom: '2020-01-01' }); return s; };
+
+test('keep: one record per question, its work copied; anything incomplete is refused', () => {
+  const s = M.createStore();
+  assert.deepEqual(s.work, [], 'a new store keeps no work');
+  const r = M.keep(s, WORK);
+  assert.deepEqual(r, WORK);
+  assert.notEqual(r.span, WORK.span, 'the span is copied, not shared');
+  assert.deepEqual(M.keep(s, { ...WORK, qid: 'q2', question: undefined, raw: 7 }).question, '');
+  assert.equal(s.work[1].raw, '', 'a raw output that is not text is kept as empty text');
+  assert.equal(s.work.length, 2);
+  M.keep(s, { ...WORK, raw: 'in 911' });
+  assert.deepEqual(s.work.map((x) => [x.qid, x.raw]), [['q1', 'in 911'], ['q2', '']], 'the first question kept again replaces its own record');
+  M.keep(s, { ...WORK, qid: 'q2', raw: 'again' });
+  assert.deepEqual(s.work.map((x) => [x.qid, x.raw]), [['q1', 'in 911'], ['q2', 'again']], 'so does the second');
+  assert.equal(M.keep(null, WORK), null);
+  assert.equal(M.keep(s, null), null);
+  assert.equal(M.keep(s, { ...WORK, span: undefined }), null);
+  assert.equal(M.keep(s, { ...WORK, sourceId: undefined }), null);
+  assert.equal(M.keep(s, { ...WORK, qid: null }), null);
+  assert.equal(M.keep(s, { ...WORK, span: { start: 3, end: 3, text: '' } }), null, 'an empty span is no answer');
+  assert.equal(s.work.length, 2, 'nothing refused was added');
+  const older = { versions: [] };
+  M.keep(older, WORK);
+  assert.equal(older.work.length, 1, 'a store made before work was kept gets a list');
+});
+
+test('nearest: the best-ranked remembered question that has kept work', () => {
+  const s = M.createStore();
+  M.keep(s, { ...WORK, qid: 'b' }); M.keep(s, { ...WORK, qid: 'c' });
+  assert.deepEqual(M.nearest(s, [['a', 0.99], ['b', 0.9], ['c', 0.8]]), { work: s.work[0], score: 0.9 }, "'a' has no work, so 'b' is the nearest");
+  assert.deepEqual(M.nearest(s, [['c', 0.7], ['b', 0.6]]), { work: s.work[1], score: 0.7 });
+  assert.equal(M.nearest(s, [['a', 0.99]]), null);
+  assert.equal(M.nearest(null, [['b', 1]]), null);
+  assert.equal(M.nearest(s, null), null);
+  assert.equal(M.nearest(s, ['b', 'junk']), null, 'malformed entries never match');
+});
+
+test('recheck: kept work is served to a new question only when the gate passes again for it, at the kept offsets', () => {
+  const s = withP1();
+  const w = M.keep(s, WORK);
+  const seen = [];
+  assert.deepEqual(M.recheck(s, w, '2026-01-01', (v) => { seen.push(v.id); return GOOD(); }, G.decide, BARS),
+    { ok: true, answer: 'n', version: 'n@1', span: { start: AT, end: AT + 3, text: '911' } });
+  assert.deepEqual(seen, ['n@1'], 'the new question is matched against the current version, and only that one passage');
+  assert.deepEqual(M.recheck(s, w, '2026-01-01', () => ({ ...GOOD(), score: 0.89 }), G.decide, BARS), { ok: false, check: 2, why: 'no source clears the grounding bar' });
+  assert.deepEqual(M.recheck(s, w, '2026-01-01', () => ({ ...GOOD(), weakest: 0.5, weakestToken: 'paris' }), G.decide, BARS),
+    { ok: false, check: 3, why: "the best source does not support 'paris'" });
+  const none = M.keep(s, { ...WORK, qid: 'q9', raw: 'NONE' });
+  assert.equal(M.recheck(s, none, '2026-01-01', GOOD, G.decide, { ...BARS, useReader: false }).check, 4, 'the reader check is always on');
+  M.ingest(s, { id: 'n@2', sourceId: 'n', text: P2, validFrom: '2026-06-01' });
+  assert.deepEqual(M.recheck(s, w, '2026-07-01', GOOD, G.decide, BARS), { ok: false, check: 5, why: "the reader's phrase is not in the source" }, 'the source changed: caught');
+  assert.equal(M.recheck(s, w, '2026-05-01', GOOD, G.decide, BARS).ok, true, 'as of before the change it still holds');
+});
+
+test('recheck: the same words at other offsets, or a kept span that does not add up, are never served', () => {
+  const OFFSETS = { ok: false, check: 'offsets', why: 'the kept answer is not at its offsets in the current version' };
+  const moved = M.createStore();
+  M.ingest(moved, { id: 'm', sourceId: 'n', text: 'In 911 ' + P1, validFrom: '2020-01-01' });
+  assert.deepEqual(M.recheck(moved, M.keep(moved, WORK), '2026-01-01', GOOD, G.decide, BARS), OFFSETS, 'the phrase is now found earlier: moved');
+  const s = withP1();
+  assert.deepEqual(M.recheck(s, M.keep(s, { ...WORK, span: { start: 0, end: AT + 3, text: '911' } }), '2026-01-01', GOOD, G.decide, BARS), OFFSETS, 'start does not match');
+  assert.deepEqual(M.recheck(s, M.keep(s, { ...WORK, span: { start: AT, end: AT + 4, text: '911' } }), '2026-01-01', GOOD, G.decide, BARS), OFFSETS, 'end does not match');
+  assert.deepEqual(M.recheck(s, M.keep(s, { ...WORK, span: { start: AT, end: AT + 3, text: '914' } }), '2026-01-01', GOOD, G.decide, BARS), OFFSETS, 'text does not match');
+  assert.deepEqual(M.recheck(s, M.keep(s, WORK), '2026-01-01', GOOD, () => ({ answer: 'n' }), BARS), OFFSETS, 'a decision without a span is not served');
+});
+
+test('recheck / holds: nothing kept, no valid source or no way to check is never a serve, and garbage never throws', () => {
+  const s = withP1();
+  const w = M.keep(s, WORK);
+  assert.deepEqual(M.recheck(s, null, '2026-01-01', GOOD, G.decide, BARS), { ok: false, check: null, why: 'nothing kept' });
+  assert.deepEqual(M.recheck(s, { sourceId: 'n', raw: '911' }, '2026-01-01', GOOD, G.decide, BARS), { ok: false, check: null, why: 'nothing kept' }, 'work without a span');
+  assert.deepEqual(M.recheck(s, { ...w, sourceId: 'gone' }, '2026-01-01', GOOD, G.decide, BARS), { ok: false, check: null, why: 'the source is no longer valid' });
+  assert.equal(M.recheck(s, w, '2019-01-01', GOOD, G.decide, BARS).why, 'the source is no longer valid', 'before the source existed');
+  const noWay = { ok: false, check: null, why: 'no way to re-check the new question' };
+  assert.deepEqual(M.recheck(s, w, '2026-01-01', null, G.decide, BARS), noWay);
+  assert.deepEqual(M.recheck(s, w, '2026-01-01', () => null, G.decide, BARS), noWay);
+  assert.deepEqual(M.recheck(s, w, '2026-01-01', GOOD, null, BARS), noWay);
+  assert.deepEqual(M.recheck(s, w, '2026-01-01', GOOD, () => null, BARS), { ok: false, check: null, why: 'the gate gave no decision' });
+  assert.equal(M.holds(s, w, '2026-01-01'), true);
+  M.ingest(s, { id: 'n@2', sourceId: 'n', text: P2, validFrom: '2026-06-01' });
+  assert.equal(M.holds(s, w, '2026-07-01'), false, 'the source changed under it: stale');
+  assert.equal(M.holds(s, w, '2026-05-01'), true);
+  assert.equal(M.holds(s, null, '2026-01-01'), false);
+  assert.equal(M.holds(s, { ...w, sourceId: 'gone' }, '2026-01-01'), false, 'no valid version: nothing holds');
+  assert.equal(M.holds(s, { sourceId: 'n' }, '2026-05-01'), false, 'no span: nothing holds');
+  const circular = {}; circular.self = circular;
+  for (const x of [null, undefined, NaN, '', 'x', [], {}, true, 0, -1, 10n, () => {}, circular, { a: { b: null } }]) {
+    assert.doesNotThrow(() => { M.keep(x, x); M.keep(s, x); M.nearest(x, x); M.nearest(s, [x]); M.recheck(x, x, x, x, x, x); M.recheck(s, x, '2026-01-01', GOOD, G.decide, BARS); M.holds(x, x, x); M.holds(s, x, '2026-01-01'); });
+  }
+});
