@@ -1,0 +1,54 @@
+{
+ "what": "G1 (PREREG section 8): the retrieval memo, the same question asked again on an unchanged index",
+ "machine": {
+  "cpu": "12th Gen Intel(R) Core(TM) i7-1255U",
+  "cores": 12,
+  "memoryGb": 16,
+  "freeMemoryGbAtStart": 2.9
+ },
+ "conditions": {
+  "note": "a shared laptop: other build agents were running test suites and mutation gates at the same time"
+ },
+ "questions": 420,
+ "passages": 130,
+ "rounds": 3,
+ "capacity": 1000,
+ "timed": {
+  "cold": 1260,
+  "warm": 1260
+ },
+ "ms": {
+  "cold": {
+   "median": 219.435,
+   "p90": 280.805
+  },
+  "warm": {
+   "median": 0.002,
+   "p90": 0.004
+  }
+ },
+ "memoLastRound": {
+  "hits": 420,
+  "misses": 420,
+  "evicted": 0
+ },
+ "checks": {
+  "coldEqualsShippedTable": true,
+  "everyColdCallMissed": true,
+  "warmIsWhatColdKept": true,
+  "afterIndexChange": {
+   "answeredFromMemo": 0,
+   "equalsFreshComputation": true,
+   "resultsThatChanged": 420,
+   "evictedByTheChange": 420
+  }
+ },
+ "timesFaster": 91431,
+ "g1": {
+  "a": true,
+  "b": true,
+  "c": true,
+  "pass": true
+ },
+ "notCounted": "encoding the question with the model (in the speed table; a hit skips it too) and the reader"
+}

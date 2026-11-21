@@ -33,7 +33,7 @@ test('the page script runs on the shipped data and fills every section', async (
   globalThis.fetch = async (u) => { const f = new URL(u, root); return existsSync(f) ? { ok: true, json: async () => JSON.parse(readFileSync(f, 'utf8')) } : { ok: false, status: 404 }; };
   await import(pathToFileURL(new URL('page.mjs', root).pathname.replace(/^\/([A-Za-z]:)/, '$1')).href + '?t=' + Date.now());
   const filled = (id) => { const e = els.get(id); const s = (e.innerHTML || e.textContent || '') + (e._tbody ? e._tbody.innerHTML : ''); return s.length > 0 && !/^…$/.test(s.trim()); };
-  for (const id of ['badges', 'v1line', 'claimsTbl', 'claimsNote', 'exLate', 'exRefuse', 'exGrounded', 'exMulti', 'exFresh', 'exMemory', 'exFail', 'exPicture', 'fbParity', 'trace', 'sysTbl', 'offTbl', 'hotTbl', 'freshTbl', 'memTbl', 'condTbl', 'speedTbl', 'h1Out', 'bpTbl', 'costTbl', 'costNote', 'board', 'paperResults', 'limitsDyn']) {
+  for (const id of ['badges', 'v1line', 'claimsTbl', 'claimsNote', 'exLate', 'exRefuse', 'exGrounded', 'exMulti', 'exFresh', 'exMemory', 'exFail', 'exPicture', 'fbParity', 'trace', 'sysTbl', 'offTbl', 'hotTbl', 'freshTbl', 'memTbl', 'condTbl', 'speedTbl', 'foldLine', 'h1Out', 'bpTbl', 'costTbl', 'costNote', 'board', 'paperResults', 'limitsDyn']) {
     assert.ok(filled(id), id + ' is empty');
     const s = (els.get(id).innerHTML || '') + (els.get(id).textContent || '') + (els.get(id)._tbody ? els.get(id)._tbody.innerHTML : '');
     assert.ok(!/undefined|NaN|\[object Object\]/.test(s), id + ' shows undefined/NaN: ' + s.slice(0, 200));
@@ -68,7 +68,7 @@ test('the download size the page states is the real size of the files the re-run
 });
 
 test('the engine makes no network calls: no fetch, XMLHttpRequest, WebSocket or http import in src/', () => {
-  for (const f of ['late', 'gate', 'graph', 'memory', 'conduct', 'stats', 'hyper', 'measure', 'assemble', 'cost', 'examples', 'publish', 'v1']) {
+  for (const f of ['late', 'gate', 'graph', 'memory', 'conduct', 'stats', 'hyper', 'measure', 'assemble', 'cost', 'examples', 'publish', 'v1', 'foldcache']) {
     const s = readFileSync(new URL('src/' + f + '.mjs', root), 'utf8');
     assert.doesNotMatch(s, /\bfetch\(|XMLHttpRequest|WebSocket|from 'node:http|require\(/, f);
   }

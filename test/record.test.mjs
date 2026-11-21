@@ -7,7 +7,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { assemble } from '../src/assemble.mjs';
+import { assemble, scorer } from '../src/assemble.mjs';
+import FC from '../src/foldcache.mjs';
 import { measure, rowsFor, search, replay, decideRow } from '../src/measure.mjs';
 import { pick } from '../src/examples.mjs';
 import { publishable, compareRecords } from '../src/publish.mjs';
@@ -96,4 +97,33 @@ test('the C7b re-check is retrieval’s own arithmetic: on every eval paraphrase
     }
   }
   assert.equal(n, 420 * 3);
+});
+
+test('G1 re-checked on shipped questions: a repeat comes from the memo with the shipped scores; a changed index never does', () => {
+  const evalQ = F.s1.questions.slice(Math.floor(F.s1.questions.length * 0.3)).slice(0, 20);
+  const later = new Map(F.s4.items.map((f) => [f.sourceId, f.v2.id]));
+  const docsA = F.s1.paragraphs.map((p) => ({ id: p.id })), docsB = F.s1.paragraphs.map((p) => ({ id: later.get(p.id) || p.id }));
+  const scoreA = scorer(docsA, F.s1.col.docs, F.s1.nomic.docs), scoreB = scorer(docsB, { ...F.s1.col.docs, ...F.s4.col }, { ...F.s1.nomic.docs, ...F.s4.nomic });
+  const vA = FC.indexVersion(docsA.map((d) => d.id)), vB = FC.indexVersion(docsB.map((d) => d.id));
+  const memo = FC.createMemo(1000);
+  for (const q of evalQ) {
+    const x = FC.scored(memo, q.text, vA, () => scoreA(F.s1.col.q[q.qid], F.s1.nomic.q[q.qid]));
+    assert.equal(x.hit, false); assert.deepEqual(x.value, shipped.q[q.qid], q.qid);
+  }
+  for (const q of evalQ) {
+    const x = FC.scored(memo, q.text, vA, () => assert.fail('a repeat must not be scored again'));
+    assert.equal(x.hit, true); assert.deepEqual(x.value, shipped.q[q.qid], q.qid);
+  }
+  let changed = 0;
+  for (const q of evalQ) {
+    const x = FC.scored(memo, q.text, vB, () => scoreB(F.s1.col.q[q.qid], F.s1.nomic.q[q.qid]));
+    assert.equal(x.hit, false, 'never answered from the old index');
+    assert.deepEqual(x.value, scoreB(F.s1.col.q[q.qid], F.s1.nomic.q[q.qid]), q.qid);
+    if (JSON.stringify(x.value) !== JSON.stringify(shipped.q[q.qid])) changed++;
+  }
+  assert.ok(changed > 0, 'the change really changes the results');
+  const pub = read('data/v2/foldcache.json');
+  assert.equal(pub.g1.pass, pub.g1.a && pub.g1.b && pub.g1.c, 'the published verdict follows its three parts');
+  assert.equal(pub.g1.c, pub.ms.warm.median <= pub.ms.cold.median / 10, 'part (c) follows the published medians');
+  assert.equal(pub.g1.b, pub.checks.afterIndexChange.answeredFromMemo === 0 && pub.checks.afterIndexChange.equalsFreshComputation === true);
 });

@@ -16,7 +16,7 @@ export const MODULES = {
   'src/memory.mjs': ['test/memory.test.mjs'], 'src/stats.mjs': ['test/small.test.mjs'], 'src/hyper.mjs': ['test/small.test.mjs'],
   'src/conduct.mjs': ['test/small.test.mjs'], 'src/cost.mjs': ['test/cost.test.mjs'], 'src/measure.mjs': ['test/mini.test.mjs'],
   'src/assemble.mjs': ['test/mini.test.mjs'], 'src/publish.mjs': ['test/mini.test.mjs'], 'src/examples.mjs': ['test/mini.test.mjs'],
-  'src/wordpiece.mjs': ['test/wordpiece.test.mjs'],
+  'src/wordpiece.mjs': ['test/wordpiece.test.mjs'], 'src/foldcache.mjs': ['test/foldcache.test.mjs'],
   'genome/cell.mjs': ['test/genome.test.mjs'], 'genome/lane-share.mjs': ['test/genome.test.mjs'],
 };
 const out = { witness: 'v0.6', files: {} };

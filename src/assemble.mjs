@@ -16,14 +16,14 @@ export function b64ToInt16(s) {
 }
 const col = (e) => ({ tokens: e.tokens, m: L.fromInt8(L.b64ToInt8(e.v), DIM) });
 
-// scoreSet(questions, docs, colQ, colD, nomQ, nomD) → { [qid]: { col, cosN, cosP: [[id, score]...] all docs, ev } }
-export function scoreSet(questions, docs, colQ, colD, nomQ, nomD) {
-  const out = {};
+// scorer(docs, colD, nomD) → score(colQ, nomQ): the passages decoded ONCE, then one question at a time scored against all
+// of them → { col, cosN, cosP: [[id, score]...] all docs, ev }. This is the step the retrieval memo keeps (G1).
+export function scorer(docs, colD, nomD) {
   const dc = new Map(docs.map((d) => [d.id, col(colD[d.id])]));
   const dn = new Map(docs.map((d) => [d.id, { N: b64ToInt16(nomD[d.id].N), P: b64ToInt16(nomD[d.id].P) }]));
-  for (const q of questions) {
-    const cq = col(colQ[q.qid]);
-    const vN = b64ToInt16(nomQ[q.qid].N), vP = b64ToInt16(nomQ[q.qid].P);
+  return (colQ, nomQ) => {
+    const cq = col(colQ);
+    const vN = b64ToInt16(nomQ.N), vP = b64ToInt16(nomQ.P);
     const c = [], n = [], p = [];
     for (const d of docs) {
       const cd = dc.get(d.id);
@@ -34,8 +34,14 @@ export function scoreSet(questions, docs, colQ, colD, nomQ, nomD) {
     }
     const rc = L.rank(c), ev = {};
     for (const x of rc.slice(0, 3)) { const e = L.evidence(cq.tokens, x.m.sims, x.m.best, x.tokens); ev[x.id] = { weakest: r6(e.weakest), weakestToken: e.weakestToken }; }
-    out[q.qid] = { col: rc.map((x) => [x.id, x.score]), cosN: L.rank(n).map((x) => [x.id, x.score]), cosP: L.rank(p).map((x) => [x.id, x.score]), ev };
-  }
+    return { col: rc.map((x) => [x.id, x.score]), cosN: L.rank(n).map((x) => [x.id, x.score]), cosP: L.rank(p).map((x) => [x.id, x.score]), ev };
+  };
+}
+
+// scoreSet(questions, docs, colQ, colD, nomQ, nomD) → { [qid]: score of that question } for every question
+export function scoreSet(questions, docs, colQ, colD, nomQ, nomD) {
+  const score = scorer(docs, colD, nomD), out = {};
+  for (const q of questions) out[q.qid] = score(colQ[q.qid], nomQ[q.qid]);
   return out;
 }
 
@@ -117,4 +123,4 @@ export function assemble(F, opts) {
   return { D, s1Scores, oosScores, s4Scores, qq: D.s5 ? D.s5.qq : null, paraScores: D.s5 ? D.s5.paraScores : null };
 }
 
-export default { b64ToInt16, scoreSet, qqScores, paraScores, matchOne, assemble };
+export default { b64ToInt16, scorer, scoreSet, qqScores, paraScores, matchOne, assemble };

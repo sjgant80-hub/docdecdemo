@@ -26,7 +26,9 @@ measured the same way. C7 stays failed exactly as published; C7b's verdict is on
 
 Measurement: `src/measure.mjs` (every number and verdict), `src/assemble.mjs`, `src/stats.mjs` (exact McNemar),
 `src/examples.mjs` (the fixed rules that pick every example), `src/cost.mjs` (the cost case from `data/prices.lock.json`),
-`src/hyper.mjs` (the frontier prototype, never claimed), `src/wordpiece.mjs` (the model's tokenizer, for the in-browser box).
+`src/hyper.mjs` (the frontier prototype, never claimed), `src/wordpiece.mjs` (the model's tokenizer, for the in-browser box),
+`src/foldcache.mjs` (the retrieval memo: the same question on the same documents is scored once; timed by
+`bench/foldcache.mjs` against its own pre-registered rule, G1, in PREREG.md section 8).
 Every module is mutation-gated CLEAN (witness v0.6); the counts are in `data/v2/gates.json` and on the page.
 
 ## Re-derive every number

@@ -5,7 +5,7 @@
 // examples.mjs.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { assemble, b64ToInt16, scoreSet, matchOne } from '../src/assemble.mjs';
+import { assemble, b64ToInt16, scoreSet, matchOne, scorer } from '../src/assemble.mjs';
 import { measure, metrics, search, matched, spans, rowsFor, decideRow, replay } from '../src/measure.mjs';
 import { pick } from '../src/examples.mjs';
 import { publishable, compareRecords } from '../src/publish.mjs';
@@ -435,4 +435,10 @@ test('passRecycle at its exact boundaries', () => {
   assert.equal(MS.passRecycle(ok), true, 'equal accuracy and false serves exactly at the limit pass');
   for (const [k, v] of [['bar', null], ['served', 0], ['falseServeRate', 0.0101], ['warm', 0.49], ['staleServed', 1]]) assert.equal(MS.passRecycle({ ...ok, [k]: v }), false, k);
   assert.equal(MS.passRecycle({ ...ok, bar: 0 }), true, 'a bar of 0 is still a bar');
+});
+
+test('scorer: the passages decoded once, then one question at a time, exactly what scoreSet gives', () => {
+  const score = scorer(paragraphs, s1.col.docs, s1.nomic.docs);
+  for (const q of questions) assert.deepEqual(score(s1.col.q[q.qid], s1.nomic.q[q.qid]), A.s1Scores[q.qid], q.qid);
+  assert.deepEqual(score(s1.col.q.q8, s1.nomic.q.q8).col[0], ['B#0', 0.75]);
 });
