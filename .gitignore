@@ -8,3 +8,6 @@ bench/node_modules/
 bench/models/
 bench/raw/
 bench/cache/
+
+# witness mutation gate, cloned per run
+.witness/

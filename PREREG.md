@@ -91,3 +91,66 @@ rank 1 for a specific question) reported for both.
 
 Public benchmarks, not a client's corpus. S4's changes are synthetic. S5's paraphrases are model-written. The reader's
 outputs depend on the model build; they are shipped, so every published number is re-derived from shipped data in CI.
+
+## 7 · Addendum 1, 2026-11-21: claim C7b, a memory that reuses work and re-checks it
+
+Written and pushed **before** any C7b number was computed; the commit that adds this section is its seal. **C7 stays FAIL
+exactly as published.** C7b is a new claim with its own rule. It is never a relabel of C7, and C7's numbers, rule and
+verdict are not touched.
+
+**Why.** C7 failed: with the memory, 67.6% of decisions were right against 68.1% without it, and stored answers went to
+3.45% of unanswerable reworded questions (7 of 203; the bar was 1%). That memory stored CONCLUSIONS (an answer) and served one when
+a new question looked like an old one. The hypothesis tested here: keep the WORK instead (the retrieval for the earlier
+question and the reader's phrase), and before serving anything, re-run the grounding checks for the NEW question against
+the CURRENT source.
+
+**Use (what is stored).** As in C7: every original S1 question, tune and eval, goes through DocDec v2 at its tune-chosen
+setting (bar t, evidence bar e, reader on). For each question it answers, the memory keeps that question's work, one
+record per question: the passage and version it chose, its late-interaction score and evidence, the reader's raw output,
+and the answer span with its character offsets.
+
+**Serve (what a reworded question gets).** For each S5 paraphrase:
+
+1. Take the remembered question with stored work that matches it best by ColBERT question-to-question MaxSim (the same
+   shipped table C7 uses).
+2. If that match scores below the match bar m, nothing is served: the question takes the cold path (DocDec v2 as usual).
+3. Otherwise the stored work is re-checked for the NEW question against the version of the stored source valid now
+   (2026-11-18): the new question's MaxSim score and evidence are computed against that one passage from the shipped
+   token vectors, and the real gate (`src/gate.mjs` decide) runs on them with v2's t and e, the reader's stored output
+   standing in for a new reader call. It must pass check 2 (score at least t), check 3 (every content word of the new
+   question supported at least e) and check 5 (the reader's phrase found word for word in the current version), and the
+   span the gate finds must be at the stored offsets with the stored text. Any failure: nothing is served, the cold path runs.
+4. Only then is the stored answer served (its source and its span). This path never makes a new reader call, and never
+   serves a model's output without check 5.
+
+**m, chosen on the tune split only.** m is the lowest tune match score whose tune false-serve rate is at most 1%, where a
+false serve is an unanswerable tune paraphrase whose best match clears m AND passes the re-check (a match that fails the
+re-check can never be served, whatever the bar). Otherwise the rule is C7's (`pickBar`). If no m qualifies, the memory is
+off. t and e are v2's tune-chosen values, unchanged. Nothing is chosen on eval.
+
+**Stale.** After the S4 changes land (86 sources get a later version), the same eval serve is run again against the
+changed store. A stored answer is stale when its source's current version no longer holds the stored span's text at the
+stored offsets. A stale serve is a stale answer served.
+
+**C7b passes only if, on the 420 eval paraphrases:**
+
+- (a) stored answers given to unanswerable paraphrases are at most 1% of the unanswerable eval paraphrases;
+- (b) decision accuracy with the memory is at least decision accuracy without it (the cold path alone), with C7's
+  definition (answerable: answered with the right paragraph; unanswerable: refused); with the memory, a served question
+  is scored on the stored answer and every other question on its cold decision;
+- (c) no stale serve after the S4 changes;
+- and the test is not empty: m exists and at least one eval paraphrase is served. A memory that never serves has not
+  been tested; that is recorded as FAIL (not tested), never as a pass.
+
+**Reported as benefits, never part of the rule:** reader calls saved (served paraphrases whose cold path would have asked
+the reader, because it passed checks 2 and 3 on its own best passage; C7 counted every serve, C7b counts only these), and
+passages scored with the memory against without it (the cold path scores all 130 passages; a re-check scores one). **Also
+reported, not part of the rule:** how many re-checks each check stopped; exact match of the served spans against the new
+question's gold answers beside the cold path's on the same questions (a reused phrase answered the earlier question); the
+paired exact McNemar test of with-memory against without; and the cost the memory adds (every question is first matched
+against every remembered question, served or not).
+
+**Where it is computed.** `src/memory.mjs` (the stored work and the re-check, new functions beside C7's) and
+`src/measure.mjs` (the one v2 measurement). Published in `data/v2/record.json` under `claims.C7b` and `s5b`, re-derived
+from the shipped data on every push by `test/record.test.mjs` and in a visitor's browser by the page's re-run button.
+`rerun.mjs` and `rerun.test.mjs` are version one's measurement path and stay as published.
