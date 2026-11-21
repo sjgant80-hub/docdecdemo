@@ -1,7 +1,7 @@
 // page.mjs — renders DocDec v2's page from the shipped record. Every number on the page comes from data/v2/record.json
 // (or the cost kernel run on data/prices.lock.json + data/v2/measured.json); none is typed into the HTML.
 import K from './src/cost.mjs';
-import { passMatched, passFresh, passCache } from './src/measure.mjs';
+import { passMatched, passFresh, passCache, passRecycle } from './src/measure.mjs';
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -35,7 +35,8 @@ const d = (k) => C[k].detail;
 // the bars, read from the pre-registered pass rules themselves (src/measure.mjs), never retyped here
 const scan = (ok) => { let last = null; for (let i = 0; i <= 1000; i++) if (ok(i / 1000)) last = i / 1000; return last; };
 const BAR = { recallGap: scan((g) => passMatched(true, 0.5 - g, 0.5)), fresh: 1 - scan((g) => passFresh(1 - g, 1, true)),
-  falseServe: scan((f) => passCache({ bar: 1, warm: 1, cold: 0, falseServeRate: f, served: 1, staleServed: 0 })) };
+  falseServe: scan((f) => passCache({ bar: 1, warm: 1, cold: 0, falseServeRate: f, served: 1, staleServed: 0 })),
+  recycleFalseServe: scan((f) => passRecycle({ bar: 1, warm: 1, cold: 0, falseServeRate: f, served: 1, staleServed: 0 })) };
 const pts = (x) => (100 * x).toFixed(1) + ' points';
 // one line per failed claim: which part of its rule failed, from the record
 const WHY = {
@@ -45,8 +46,26 @@ const WHY = {
     if (!(x.falseServeRate <= BAR.falseServe)) f.push(`it gave stored answers to ${pct(x.falseServeRate)} of unanswerable reworded questions (the bar was ${pct(BAR.falseServe)})`);
     if (!(x.readerCallsSaved > 0)) f.push('it saved no reader calls'); if (x.staleServed !== 0) f.push(`it served ${x.staleServed} stale answers`);
     return `The memory does not earn its place yet: ${f.join('; ')}. It did save ${x.readerCallsSaved} reader calls and served no stale answer.`; },
+  C7b: (x) => { const f = [];
+    if (x.matchBar === null) f.push('no match bar qualified on the tune split, so the memory was off');
+    else if (!(x.served > 0)) f.push('nothing was served on the held-out questions');
+    if (!(x.falseServeRate <= BAR.recycleFalseServe)) f.push(`it gave stored answers to ${pct(x.falseServeRate)} of unanswerable reworded questions (the bar was ${pct(BAR.recycleFalseServe)})`);
+    if (!(x.warmAccuracy >= x.coldAccuracy)) f.push(`with the memory it was less accurate (${pct(x.warmAccuracy)} against ${pct(x.coldAccuracy)})`);
+    if (x.staleServed !== 0) f.push(`it served ${x.staleServed} stale answers`);
+    return `Reusing the work and re-checking it did not pass either: ${f.join('; ')}. It served ${x.served} reworded questions from memory and saved ${x.readerCallsSaved} reader calls; against the cold path it won ${x.test.aOnly} question${x.test.aOnly === 1 ? '' : 's'} and lost ${x.test.bOnly}; after the changes ${x.staleServed} stale answers were served and ${x.staleCaught} caught.${c7bWhy()}`; },
 };
-const row = (k, cells) => `<tr><td><b>${k}</b> ${esc(C[k].claim)}${!C[k].pass && WHY[k] ? `<br><span class="small muted">${WHY[k](d(k))}</span>` : ''}</td>${cells}<td>${tag(C[k].pass)}</td></tr>`;
+// C7b's false serves, read from the record: which the cold path got wrong too, and which it refused (and at which check)
+function c7bWhy() {
+  const b = R.s5b; if (!b || !(b.falseServes > 0)) return '';
+  const L = b.lostWhereColdWasRight, at = [1, 2, 3, 4, 5].filter((k) => L[k] > 0), lost = at.reduce((a, k) => a + L[k], 0);
+  const only4 = at.length === 1 && at[0] === 4;
+  return ` Why, found after the result: of the ${b.falseServes} stored answers given to unanswerable questions, ${b.falseServes - lost} the cold path got wrong too (it answered those questions itself)${lost ? `, and ${lost} it refused ${only4 ? 'only because its own reader call, made afresh for the new question, found no answer in the passage (check 4), a check that reused work cannot repeat without a new reader call' : `at ${at.map((k) => `check ${k} (${L[k]})`).join(', ')}`}` : ''}.`;
+}
+// a line under a claim whatever its verdict (C7b is new: when it passes, it still says what changed from C7)
+const SAYS = {
+  C7b: (x) => `A second design, pre-registered after C7 failed: the memory keeps the work behind each answer (the passage, its scores, the reader's phrase) and re-runs the gate's checks for the new question on the current passage before serving anything. ${x.served} reworded questions were served from memory and ${x.readerCallsSaved} reader calls saved; after the changes ${x.staleServed} stale answers were served and ${x.staleCaught} caught.`,
+};
+const row = (k, cells) => `<tr><td><b>${k}</b> ${esc(C[k].claim)}${!C[k].pass && WHY[k] ? `<br><span class="small muted">${WHY[k](d(k))}</span>` : C[k].pass && SAYS[k] ? `<br><span class="small muted">${SAYS[k](d(k))}</span>` : ''}</td>${cells}<td>${tag(C[k].pass)}</td></tr>`;
 const rows = [
   row('C1', `<td>right passage first: ${pct(d('C1').s1.colbert)} (guild corpus), ${pct(d('C1').s2.colbert)} (9x corpus)</td><td>${pct(d('C1').s1.cosine)}, ${pct(d('C1').s2.cosine)}</td><td>${p(d('C1').s1.test)}; ${p(d('C1').s2.test)}</td>`),
   row('C2', `<td>decisions right ${pct(d('C2').a.v2)}; at the baseline's recall, refuses ${pct(d('C2').b.v2Refusal)} of unanswerable (recall ${pct(d('C2').b.v2Recall)})</td><td>${pct(d('C2').a.baseline)}; refuses ${pct(d('C2').b.baselineRefusal)} (recall ${pct(d('C2').b.baselineRecall)})</td><td>${p(d('C2').a.test)}; ${p(d('C2').b.test)}</td>`),
@@ -55,6 +74,7 @@ const rows = [
   row('C5', `<td>latest version: ${pct(d('C5').latestMemory)}; history as of 2021: ${pct(d('C5').history)}</td><td>flat index: ${pct(d('C5').latestFlat)}</td><td>${p(d('C5').test)}</td>`),
   row('C6', `<td>${d('C6').verbatim} of ${d('C6').audited} answers found word for word at their offsets</td><td>a cloud RAG gives no offsets to check</td><td>exact count</td>`),
   row('C7', `<td>right ${pct(d('C7').warmAccuracy)} with memory, ${d('C7').readerCallsSaved} reader calls saved, ${pct(d('C7').falseServeRate)} false serves, ${d('C7').staleServed} stale serves</td><td>without memory: ${pct(d('C7').coldAccuracy)}</td><td>pass rule: no worse, false serves at most 1%, no stale serve</td>`),
+  ...(C.C7b ? [row('C7b', `<td>right ${pct(d('C7b').warmAccuracy)} with memory, ${d('C7b').served} served after the re-check, ${d('C7b').readerCallsSaved} reader calls saved, ${pct(d('C7b').falseServeRate)} false serves, ${d('C7b').staleServed} stale serves</td><td>without memory: ${pct(d('C7b').coldAccuracy)}</td><td>pass rule: no worse, false serves at most ${pct(BAR.recycleFalseServe)}, no stale serve, something served (${p(d('C7b').test)}, reported only)</td>`)] : []),
 ];
 // C8 is decided by the speed run's own record (bench/latency.mjs): every outgoing connection it opened, and its medians
 const c8 = MEAS && MEAS.c8 ? MEAS.c8 : null;
@@ -102,7 +122,14 @@ if (E.fresh) { const f = E.fresh; const diff = (txt, val) => { const i = txt.ind
   A remembered answer is only served if the new question matches a remembered one closely (the bar was chosen on the tune split so that at most 1% of tune unanswerable questions got a stored answer) <i>and</i> its exact words are still in the current version of the source.</p>
   <p>Served from memory: <b>${s.served}</b> of ${s.eval} (${s.served} reader calls saved). Right with the memory: ${pct(c.warmAccuracy)}; without it: ${pct(c.coldAccuracy)}. Stored answers wrongly given to unanswerable questions: <b>${s.falseServes}</b>.
   After the fresh-set changes landed, answers whose source changed were caught by the re-check ${s.staleCaught} times and served stale <b>${s.staleServed}</b> times.
-  Four months of no use later, the metabolism keeps ${s.metabolismFourMonthsLater.kept} cached answers and prunes ${s.metabolismFourMonthsLater.pruned}; the source versions themselves are never pruned.</p></div>` : '<p class="muted">Not measured.</p>'; }
+  Four months of no use later, the metabolism keeps ${s.metabolismFourMonthsLater.kept} cached answers and prunes ${s.metabolismFourMonthsLater.pruned}; the source versions themselves are never pruned.</p></div>` : '<p class="muted">Not measured.</p>';
+  const b = R.s5b; if (b && C.C7b) { const x = C.C7b.detail, st = b.stoppedBy, sp = b.servedSpans;
+    $('exMemory').innerHTML += `<div class="card"><p><b>A second design (claim C7b, ${C.C7b.pass ? 'passed' : 'failed'}).</b> That memory stored answers, and C7 failed. This one, pre-registered before it was measured, keeps the <i>work</i> behind each answer instead: the passage it chose, its scores and the reader's phrase, for <b>${b.kept}</b> answered questions.
+  A reworded question first finds its closest remembered question. If that match reaches ${b.matchBar ?? 'a bar (none qualified, so the memory was off)'} (the lowest bar at which no more than ${pct(BAR.recycleFalseServe)} of tune unanswerable questions would have been served after the re-check), the gate's checks run again <i>for the new question</i> on the current version of that one passage: its own score against the bar, every content word of the new question supported, and the reader's phrase found word for word at the same characters. Only then is anything served. No new reader call is made.</p>
+  <p>Served from memory: <b>${b.served}</b> of ${b.eval}; ${b.tried - b.served} more cleared the match but were stopped by the re-check (${st[2]} at the bar, ${st[3]} at the evidence check, ${st[5]} word for word, ${st.offsets} moved, ${st[4] + st.other} other). Right with the memory: ${pct(x.warmAccuracy)}; without it: ${pct(x.coldAccuracy)}. Stored answers wrongly given to unanswerable questions: <b>${b.falseServes}</b> of ${b.unanswerable}.
+  After the fresh-set changes: served stale <b>${b.afterChanges.staleServed}</b> times, caught ${b.afterChanges.staleCaught} times.
+  Reader calls saved: ${b.readerCallsSaved}. Passages scored: ${b.passagesScored.withMemory.toLocaleString('en-GB')} with the memory against ${b.passagesScored.without.toLocaleString('en-GB')} without, though every question is first matched against all ${b.matchedAgainstPerQuestion} remembered questions, served or not.
+  A reused phrase answered the earlier question, not always the new one: of ${sp.answerable} answerable questions served, ${sp.exactMatch} were word-for-word right answers; the cold path got ${sp.coldExactMatchOnSame} of the same questions word-for-word right.${C.C7b.pass ? '' : c7bWhy()}</p></div>`; } }
 
 $('exFail').innerHTML = `<div class="grid two"><div class="card"><p class="small"><b>Refused, though the answer was there</b></p>${E.refusedAnswerable.map((x) => `<p class="q">${esc(x.question)}</p><p class="small">Answer was: ${esc(x.answers.join(' / '))}. Refused at check ${x.check}: ${esc(x.why)}.</p>`).join('')}</div>
   <div class="card"><p class="small"><b>Answered, though it should have refused</b></p>${E.answeredUnanswerable.map((x) => `<p class="q">${esc(x.question)}</p><p class="small">Gave “${esc(x.span.text)}” from ${pid(x.source.id)}: the words really are there, but they do not answer this question.</p>`).join('')}</div></div>`;
@@ -141,7 +168,10 @@ const f4 = R.s4;
 $('freshTbl').innerHTML = `<tr><th>Of ${f4.n} changed facts</th><th class="num">Count</th></tr><tr><td>Changes recognised as a new version of their own paragraph, with no source ids given</td><td class="num">${f4.detection.linkedToItsOwnOldVersion}</td></tr><tr><td>Changes linked to a wrong paragraph</td><td class="num">${f4.detection.linkedWrong}</td></tr>
   <tr><td>DocDec read the current version</td><td class="num">${f4.retrieval.latestMemory}</td></tr><tr><td>Flat index read the current version / the old one</td><td class="num">${f4.retrieval.latestFlat} / ${f4.retrieval.staleFlat}</td></tr><tr><td>As of 2021, DocDec read the then-current version</td><td class="num">${f4.retrieval.historyAsOf2021}</td></tr>
   <tr><td>Answers giving the new value: DocDec / flat</td><td class="num">${f4.answers.memoryNewValue} / ${f4.answers.flatNewValue}</td></tr><tr><td>Answers giving the old value: DocDec / flat</td><td class="num">${f4.answers.memoryOldValue} / ${f4.answers.flatOldValue}</td></tr>`;
-$('memTbl').innerHTML = R.s5 ? `<tr><th>Measure</th><th class="num">Value</th></tr><tr><td>Facts remembered from use</td><td class="num">${R.s5.remembered}</td></tr><tr><td>Match bar (chosen on tune)</td><td class="num">${R.s5.threshold ?? 'none qualified: memory off'}</td></tr><tr><td>Held-out paraphrases served from memory</td><td class="num">${R.s5.served} of ${R.s5.eval}</td></tr><tr><td>Right with memory / without</td><td class="num">${R.s5.warmRight} / ${R.s5.coldRight}</td></tr><tr><td>False serves / stale serves</td><td class="num">${R.s5.falseServes} / ${R.s5.staleServed}</td></tr>` : '';
+$('memTbl').innerHTML = R.s5 ? `<tr><th>Measure</th><th class="num">Value</th></tr><tr><td>Facts remembered from use</td><td class="num">${R.s5.remembered}</td></tr><tr><td>Match bar (chosen on tune)</td><td class="num">${R.s5.threshold ?? 'none qualified: memory off'}</td></tr><tr><td>Held-out paraphrases served from memory</td><td class="num">${R.s5.served} of ${R.s5.eval}</td></tr><tr><td>Right with memory / without</td><td class="num">${R.s5.warmRight} / ${R.s5.coldRight}</td></tr><tr><td>False serves / stale serves</td><td class="num">${R.s5.falseServes} / ${R.s5.staleServed}</td></tr>` +
+  (R.s5b ? `<tr><td colspan="2"><b>Second design (C7b): the work kept, re-checked for each new question</b></td></tr><tr><td>Answered questions whose work is kept</td><td class="num">${R.s5b.kept}</td></tr><tr><td>Match bar (chosen on tune)</td><td class="num">${R.s5b.matchBar ?? 'none qualified: memory off'}</td></tr>
+  <tr><td>Held-out paraphrases that cleared the match / passed the re-check and were served</td><td class="num">${R.s5b.tried} / ${R.s5b.served} of ${R.s5b.eval}</td></tr><tr><td>Right with memory / without</td><td class="num">${R.s5b.warmRight} / ${R.s5b.coldRight}</td></tr>
+  <tr><td>False serves / stale serves after the changes</td><td class="num">${R.s5b.falseServes} / ${R.s5b.afterChanges.staleServed}</td></tr><tr><td>Reader calls saved</td><td class="num">${R.s5b.readerCallsSaved}</td></tr>` : '') : '';
 $('condTbl').innerHTML = `<tr><th>Measure</th><th class="num">Value</th></tr><tr><td>One-fact questions read as one fact (guild corpus)</td><td class="num">${pct(R.l5.routing.lookupReadAsLookup)} of ${R.l5.routing.lookupN}</td></tr><tr><td>Two-fact questions read as two facts (HotpotQA)</td><td class="num">${pct(R.l5.routing.compositionalReadAsCompositional)} of ${R.l5.routing.compositionalN}</td></tr>
   <tr><td>Right passage first: full late interaction over all ${esc(R.l5.fastPath.corpus)}</td><td class="num">${pct(R.l5.fastPath.fullColbertTop1)}</td></tr><tr><td>Right passage first: cosine shortlist of 20, then late interaction</td><td class="num">${pct(R.l5.fastPath.shortlist20ThenColbert)}</td></tr>`;
 // what else shared the local model during the timing run (recorded by bench/latency.mjs), said plainly
@@ -163,7 +193,7 @@ $('h1Out').innerHTML = R.h1 ? `<p>Index: ${R.h1.nodes.article} article nodes, ${
 // ── blueprint ──
 const BP = [['L1 late interaction', 'src/late.mjs', 'MaxSim: every question word-piece takes its best match; the weakest content match is the evidence'],
   ['L2 graph', 'src/graph.mjs', 'titles as entities, mentions as links; the two-hop walk; the corpus’s themes'],
-  ['L3 dated memory', 'src/memory.mjs', 'versions with validity windows, supersede-not-overwrite, verified answers re-checked before reuse, metabolism'],
+  ['L3 dated memory', 'src/memory.mjs', 'versions with validity windows, supersede-not-overwrite, verified answers re-checked before reuse, metabolism; the work behind an answer kept and re-checked for each new question (C7b)'],
   ['L4 verifier gate', 'src/gate.mjs', 'the five checks, word-for-word span finding, SQuAD scoring, two-source answers'],
   ['L5 conductor', 'src/conduct.mjs', 'reads one fact or two; the cosine shortlist'],
   ['Measurement', 'src/measure.mjs', 'every number and verdict on this page, by the pre-registered rules'],

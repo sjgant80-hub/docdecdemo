@@ -5,7 +5,7 @@
 // examples.mjs.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { assemble, b64ToInt16, scoreSet } from '../src/assemble.mjs';
+import { assemble, b64ToInt16, scoreSet, matchOne } from '../src/assemble.mjs';
 import { measure, metrics, search, matched, spans, rowsFor, decideRow, replay } from '../src/measure.mjs';
 import { pick } from '../src/examples.mjs';
 import { publishable, compareRecords } from '../src/publish.mjs';
@@ -372,3 +372,67 @@ test('the example rules, one predicate each', () => {
   assert.equal(EX.staleThenFresh({ staleFlat: 1, latestMem: 1 }), true); assert.equal(EX.staleThenFresh({ staleFlat: 0, latestMem: 1 }), false); assert.equal(EX.staleThenFresh({ staleFlat: 1, latestMem: 0 }), false);
 });
 
+// ── C7b: kept work, re-checked for each paraphrase (PREREG §7) ──
+test('C7b on the miniature: kept work re-checked for each paraphrase, the bar chosen on tune (worked by hand)', () => {
+  const s = R.s5b, c = R.claims.C7b;
+  assert.equal(s.matchBar, 1, "the tune unanswerable q1 matches q0 at 0.333 but fails its re-check; only the exact matches set the bar");
+  assert.deepEqual([s.kept, s.eval, s.unanswerable, s.tried, s.served, s.falseServes, s.warmRight, s.coldRight, s.readerCallsSaved], [4, 7, 3, 2, 2, 0, 5, 4, 2]);
+  assert.deepEqual(s.stoppedBy, { 2: 0, 3: 0, 4: 0, 5: 0, offsets: 0, other: 0 });
+  assert.deepEqual(s.passagesScored, { withMemory: 17, without: 21 }, 'two re-checks of one passage, five cold retrievals of three');
+  assert.equal(s.matchedAgainstPerQuestion, 4);
+  assert.deepEqual(s.servedSpans, { answerable: 2, exactMatch: 1, coldExactMatchOnSame: 1, audited: 2, verbatim: 2 },
+    "q3's kept 'at Hastings' is not an exact match (the cold reader's 'Hastings' is); q4's kept 'French' is, where the cold reader said NONE");
+  assert.deepEqual(s.afterChanges, { served: 1, staleServed: 0, staleCaught: 1 }, "after the changes q4's French is Latin: its kept span is caught at check 5");
+  assert.deepEqual(s.lostWhereColdWasRight, { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, answered: 0 }, 'nothing the cold path got right was lost');
+  assert.deepEqual(c.detail, { warmAccuracy: 0.7143, coldAccuracy: 0.5714, falseServeRate: 0, served: 2, staleServed: 0, staleCaught: 1, matchBar: 1, readerCallsSaved: 2,
+    test: { n: 7, a: 5, b: 4, aOnly: 1, bOnly: 0, p: 1 } });
+  assert.equal(c.pass, true);
+  assert.deepEqual(Object.keys(R.claims), ['C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7', 'C7b']);
+  assert.equal(R.claims.C7.pass, true, 'C7 is still measured exactly as before, beside it');
+  const R0 = measure({ ...A.D, s5: undefined });
+  assert.equal(R0.s5b, null); assert.equal(R0.claims.C7b.pass, false); assert.deepEqual(R0.claims.C7b.detail, { why: 'no paraphrase data' });
+});
+
+test('C7b: the re-check decides the bar and the serve (a variant of the miniature, worked by hand)', () => {
+  const para = { ...s5.col.para, 'para:q0': col(T('rollo', 'founded')), 'para:q1': col(T('founded', 'normandy', 'x61')), 'para:q5': col(T('rouen', 'capital', 'founded')) };
+  const R2 = measure(assemble({ ...F, s5: { ...s5, col: { ...s5.col, para } } }).D), s = R2.s5b;
+  assert.equal(R2.s5.threshold, 1, "C7's bar: the unanswerable q1 now matches a stored question at 0.667");
+  assert.equal(s.matchBar, 0.5, "C7b's bar: q1 fails its re-check (two of its three words are in the passage), so q0's 0.5 qualifies");
+  assert.deepEqual([s.tried, s.served, s.falseServes, s.warmRight, s.coldRight, s.readerCallsSaved], [5, 2, 0, 5, 4, 2],
+    'q5 would pass its re-check, but its match (0.333) is under the bar, so it is not served and its cold path asks the reader');
+  assert.deepEqual(s.stoppedBy, { 2: 3, 3: 0, 4: 0, 5: 0, offsets: 0, other: 0 }, 'q6, q7 and q9 clear the match bar and are stopped at check 2');
+  assert.deepEqual(s.passagesScored, { withMemory: 20, without: 21 });
+  assert.equal(R2.claims.C7b.pass, true);
+});
+
+test('C7b: a kept answer served to an unanswerable question the cold reader refuses (a variant, worked by hand)', () => {
+  const para = { ...s5.col.para, 'para:q9': col(T('normans', 'spoke')) };
+  const R3 = measure(assemble({ ...F, s5: { ...s5, col: { ...s5.col, para } } }).D), s = R3.s5b;
+  assert.deepEqual([s.matchBar, s.tried, s.served, s.falseServes, s.warmRight, s.coldRight], [1, 3, 3, 1, 4, 4],
+    "q9 now reads exactly like q4 and passes the re-check (both its words are in the passage), so q4's French is served to it");
+  assert.deepEqual(s.lostWhereColdWasRight, { 1: 0, 2: 0, 3: 0, 4: 1, 5: 0, answered: 0 }, 'the cold path refused q9 only because its own reader call said NONE');
+  assert.equal(R3.claims.C7b.pass, false);
+  assert.equal(R3.claims.C7b.detail.falseServeRate, 0.3333);
+});
+
+test('matchOne: one question against one passage, exactly what retrieval computed there', () => {
+  assert.deepEqual(matchOne(s5.col.para['para:q8'], docs['B#0']), { score: 0.75, weakest: 0, weakestToken: 'x99' });
+  let n = 0;
+  for (const q of questions.slice(3)) for (const [pid, score] of A.paraScores[q.qid].col.slice(0, 3)) {
+    const m = matchOne(s5.col.para['para:' + q.qid], docs[pid]); n++;
+    assert.equal(m.score, score, q.qid + ' ' + pid);
+    assert.deepEqual({ weakest: m.weakest, weakestToken: m.weakestToken }, A.paraScores[q.qid].ev[pid], q.qid + ' ' + pid);
+  }
+  assert.equal(n, 21);
+  assert.equal(matchOne(null, docs['B#0']), null); assert.equal(matchOne(s5.col.para['para:q8'], undefined), null);
+  assert.deepEqual(A.D.s5.match('q4', 'A#1@v2'), { score: 1, weakest: 1, weakestToken: 'normans' }, 'a later version is matched from its own vectors');
+  assert.equal(A.D.s5.match('q4', 'nope'), null);
+  assert.equal(A.D.s5.match('q8', 'B#0'), A.D.s5.match('q8', 'B#0'), 'worked out once, then kept');
+});
+
+test('passRecycle at its exact boundaries', () => {
+  const ok = { bar: 0.9, served: 1, falseServeRate: 0.01, warm: 0.5, cold: 0.5, staleServed: 0 };
+  assert.equal(MS.passRecycle(ok), true, 'equal accuracy and false serves exactly at the limit pass');
+  for (const [k, v] of [['bar', null], ['served', 0], ['falseServeRate', 0.0101], ['warm', 0.49], ['staleServed', 1]]) assert.equal(MS.passRecycle({ ...ok, [k]: v }), false, k);
+  assert.equal(MS.passRecycle({ ...ok, bar: 0 }), true, 'a bar of 0 is still a bar');
+});

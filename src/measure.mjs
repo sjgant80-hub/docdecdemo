@@ -55,6 +55,9 @@ export const passMatched = (beatsIt, v2Recall, baseRecall) => beatsIt === true &
 export const passFresh = (latest, history, beatsIt) => latest >= 0.95 && history >= 0.95 && beatsIt === true;
 export const passAudit = (audited, verbatim) => audited > 0 && audited === verbatim;
 export const passCache = (x) => x.bar !== null && x.warm >= x.cold && x.falseServeRate <= 0.01 && x.served > 0 && x.staleServed === 0;
+// C7b (PREREG §7): a match bar exists and something was served (an empty test is a fail), false serves at most 1%,
+// accuracy with the memory no worse than without, no stale serve. Work saved is reported, never part of the rule.
+export const passRecycle = (x) => x.bar !== null && x.served > 0 && x.falseServeRate <= 0.01 && x.warm >= x.cold && x.staleServed === 0;
 // pickBar(hits, maxRate) → the lowest score whose false-serve rate on these tune hits is at most maxRate, or null.
 // hits: [{ impossible, score|null }]; a false serve is an unanswerable question whose best stored match clears the bar
 export function pickBar(hits, maxRate) {
@@ -214,6 +217,8 @@ export function measure(D) {
   const S4 = freshness(D, readerTracked);
   // ── S5 the cache ──
   const S5 = cache(D, chosen.v2, prefix, t1, readerTracked);
+  // ── S5 again, claim C7b: the memory keeps each answer's work and re-checks it for the new question ──
+  const S5b = recycled(D, chosen.v2, prefix, t1, readerTracked);
   // ── H1 the hyperbolic prototype ──
   const H1 = D.h1 ? hyperbolic(D, prefix, evalQ) : null;
   // ── L5 the conductor ──
@@ -231,7 +236,7 @@ export function measure(D) {
   const clean = (res) => Object.fromEntries(Object.entries(res).map(([k, v]) => [k, v ? strip(v) : v]));
   out.chosen = Object.fromEntries(Object.entries(chosen).map(([k, s]) => [k, settingOut(s)]));
   out.s1 = clean(e1); out.s2 = clean(e2); out.offTopic = offTopic; out.v1 = V1;
-  out.s3 = S3.report; out.s4 = S4.report; out.s5 = S5.report; out.h1 = H1; out.l5 = L5;
+  out.s3 = S3.report; out.s4 = S4.report; out.s5 = S5.report; out.s5b = S5b.report; out.h1 = H1; out.l5 = L5;
   out.claims = {
     C1: { claim: 'Finds the specific fact a pooled vector blurs', pass: C1.pass, detail: C1 },
     C2: { claim: "Won't answer what it can't ground, better than the baseline", pass: C2.pass, detail: C2 },
@@ -240,6 +245,7 @@ export function measure(D) {
     C5: { claim: 'Current, not stale', pass: S4.pass, detail: S4.claim },
     C6: { claim: 'Auditable: every answer is its source’s own words, at offsets anyone can check', pass: C6.pass, detail: C6 },
     C7: { claim: 'Gets better with use', pass: S5.pass, detail: S5.claim },
+    C7b: { claim: 'Gets better with use, by reusing its own work and re-checking it for each new question', pass: S5b.pass, detail: S5b.claim },
   };
   out.needs = needs;
   out.hotPairs = S3.pairs;
@@ -394,6 +400,76 @@ function cache(D, v2setting, prefix, t1, reader) {
     claim: { warmAccuracy: r4(warm), coldAccuracy: r4(coldA), falseServeRate: r4(fsr), readerCallsSaved: sum('served'), staleServed, staleCaught, threshold: c },
     report: { remembered: store.facts.length, answersGiven: factOf.size, askedOfRemembered: store.facts.reduce((a, f) => a + f.asked.length, 0), refusedLogged: store.gaps.length, threshold: c, eval: n, served: sum('served'), falseServes: sum('falseServe'), staleServed, staleCaught,
       warmRight: sum('okWarm'), coldRight: sum('okCold'), metabolismFourMonthsLater: { kept: metab.kept, pruned: metab.pruned.length } } };
+}
+
+// ── S5 again, claim C7b (PREREG §7): keep the WORK behind each answer, re-check it for the new question, then serve ──
+// Use is C7's: every original question through v2, the same reader outputs. What is kept differs: the passage, score,
+// evidence, the reader's raw output and the span at its offsets (src/memory.mjs keep). A paraphrase is served only if
+// its best remembered match clears the bar m (chosen on tune) AND the real gate passes again for the paraphrase on the
+// current version of that one passage, with the kept reader output and the span at its kept offsets (memory recheck).
+// Anything else takes the cold path, DocDec v2 as usual. No new reader call is ever made here.
+function recycled(D, v2, prefix, t1, reader) {
+  if (!D.s5) return { pass: false, report: null, claim: { why: 'no paraphrase data' } };
+  const qs = D.s1.questions;
+  const [tuneQ, evalQ] = split(qs, 0.3);
+  const bars = { bar: v2.t, evidence: v2.e };
+  const fill = () => { const st = M.createStore(); for (const p of D.s1.paragraphs) M.ingest(st, { id: p.id, sourceId: p.id, text: p.text, validFrom: V1_FROM }); return st; };
+  const store = fill();
+  for (const q of qs) {
+    const [r] = rowsFor([q], D.s1.scores, t1, reader, 'col', prefix);
+    const d = decideRow(r, v2);
+    if (d.refuse !== true) M.keep(store, { qid: q.qid, question: q.text, sourceId: d.answer, versionId: d.answer, score: r.score, weakest: r.ev.weakest, weakestToken: r.ev.weakestToken, raw: r.raw, span: d.span, at: NOW });
+  }
+  const attempt = (q, st) => { const h = M.nearest(st, D.s5.qq[q.qid]); return { h, g: h ? M.recheck(st, h.work, NOW, (v) => D.s5.match(q.qid, v.id), GT.decide, bars) : null }; };
+  // m: the lowest tune match score whose tune false-serve rate is at most 1%; a match that fails the re-check never serves
+  const m = pickBar(tuneQ.map((q) => { const { h, g } = attempt(q, store); return { impossible: q.impossible, score: h && g.ok ? h.score : null }; }), 0.01);
+  const stoppedBy = { 2: 0, 3: 0, 4: 0, 5: 0, offsets: 0, other: 0 };
+  // added after the first result (reported, never part of the rule): each question the memory got wrong that the cold
+  // path got right, by the check that refused it on the cold path ('answered': the cold path answered it right)
+  const lostWhereColdWasRight = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0, answered: 0 };
+  let audited = 0, verbatim = 0, servedAnswerable = 0, emServed = 0, emCold = 0;
+  const rows = evalQ.map((q) => {
+    const s = D.s5.paraScores[q.qid]; const [pid, score] = s.col[0];
+    const r = { q, pid, score, ev: s.ev[pid], text: t1.get(pid), get raw() { return reader('para:' + q.qid, pid); } };
+    const dc = decideRow(r, v2);
+    const okCold = correct({ q }, dc) ? 1 : 0;
+    // would the cold path have asked the reader? only if its own best passage passed checks 2 and 3
+    const asks = decideRow(r, { t: v2.t, e: v2.e, reader: false }).refuse !== true;
+    const { h, g } = attempt(q, store);
+    const tried = servable(h, m), served = tried && g.ok;
+    const okWarm = served ? (correct({ q }, { answer: g.answer }) ? 1 : 0) : okCold;
+    if (served) {
+      if (okCold === 1 && okWarm === 0) lostWhereColdWasRight[dc.refuse === true ? dc.check : 'answered'] += 1;
+      audited++; if (M.current(store, g.answer, NOW).text.slice(g.span.start, g.span.end) === g.span.text) verbatim++;
+      if (!q.impossible) { servedAnswerable++; emServed += GT.em(g.span.text, q.answers); emCold += dc.span ? GT.em(dc.span.text, q.answers) : 0; }
+    } else if (tried) stoppedBy[g.check in stoppedBy ? g.check : 'other'] += 1;
+    return { q, okCold, okWarm, tried: tried ? 1 : 0, served: served ? 1 : 0,
+      falseServe: served && q.impossible ? 1 : 0, saved: served && asks ? 1 : 0 };
+  });
+  // after the S4 changes land: the same serve against the changed store; a kept answer whose span is no longer at its
+  // offsets in its source's current version is stale, and must never be served
+  const changed = fill();
+  for (const w of store.work) M.keep(changed, w);
+  for (const f of D.s4.items) M.ingest(changed, { id: f.v2.id, sourceId: f.sourceId, text: f.v2.text, validFrom: V2_FROM });
+  let servedAfter = 0, staleServed = 0, staleCaught = 0;
+  for (const q of evalQ) {
+    const { h, g } = attempt(q, changed);
+    if (!servable(h, m)) continue;
+    if (g.ok) servedAfter++;
+    if (M.holds(changed, h.work, NOW)) continue;
+    if (g.ok) staleServed++; else staleCaught++;
+  }
+  const sum = (k) => rows.reduce((a, x) => a + x[k], 0);
+  const n = rows.length, unans = rows.filter((x) => x.q.impossible).length, P = D.s1.paragraphs.length;
+  const warm = sum('okWarm') / n, cold = sum('okCold') / n, fsr = unans ? sum('falseServe') / unans : 0;
+  return { pass: passRecycle({ bar: m, served: sum('served'), falseServeRate: fsr, warm, cold, staleServed }),
+    claim: { warmAccuracy: r4(warm), coldAccuracy: r4(cold), falseServeRate: r4(fsr), served: sum('served'), staleServed, staleCaught, matchBar: m,
+      readerCallsSaved: sum('saved'), test: ST.paired(rows.map((x) => x.okWarm), rows.map((x) => x.okCold)) },
+    report: { kept: store.work.length, matchBar: m, eval: n, unanswerable: unans, tried: sum('tried'), served: sum('served'), falseServes: sum('falseServe'),
+      warmRight: sum('okWarm'), coldRight: sum('okCold'), readerCallsSaved: sum('saved'), stoppedBy,
+      passagesScored: { withMemory: sum('tried') + (n - sum('served')) * P, without: n * P }, matchedAgainstPerQuestion: store.work.length,
+      servedSpans: { answerable: servedAnswerable, exactMatch: emServed, coldExactMatchOnSame: emCold, audited, verbatim },
+      afterChanges: { served: servedAfter, staleServed, staleCaught }, lostWhereColdWasRight } };
 }
 
 // ── H1: training-free hyperbolic retrieval over a mixed-granularity index ──

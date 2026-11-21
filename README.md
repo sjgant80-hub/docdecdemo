@@ -10,6 +10,9 @@ Version one was caught out by a fair re-run: at the same operating point it tied
 unanswerable questions. Version two is measured against exactly that baseline, **cosine top-1 plus a cut-off tuned on
 the same data**. The rules were published before any held-out number was computed: [PREREG.md](PREREG.md). Every claim
 that fails is shown as failed. The results are on the live page, generated from `data/v2/record.json`, never typed.
+When claim C7 (gets better with use) failed, a second memory design was pre-registered as a NEW claim, C7b (PREREG.md
+section 7: keep the work behind each answer and re-run the gate's checks for each new question before serving), and
+measured the same way. C7 stays failed exactly as published; C7b's verdict is on the page beside it.
 
 ## The five layers
 
@@ -17,7 +20,7 @@ that fails is shown as failed. The results are on the live page, generated from 
 |---|---|---|
 | L1 late interaction | `src/late.mjs` | ColBERT MaxSim (answerai-colbert-small-v1, int8, on CPU): every question word-piece takes its best match; the weakest content match is the evidence |
 | L2 graph | `src/graph.mjs` | the corpus's own titles as entities, mentions as links; the two-hop walk; the corpus's themes |
-| L3 dated memory | `src/memory.mjs` | versions with validity windows (supersede, never overwrite), verified answers re-checked against the current version before reuse, metabolism |
+| L3 dated memory | `src/memory.mjs` | versions with validity windows (supersede, never overwrite), verified answers re-checked against the current version before reuse, metabolism; the work behind an answer kept and re-checked for each new question (C7b) |
 | L4 verifier gate | `src/gate.mjs` | five checks; a local reader (qwen2.5:7b via Ollama) may only copy a phrase or say NONE, and the phrase must be found word for word |
 | L5 conductor | `src/conduct.mjs` | one fact or two; the cosine shortlist |
 

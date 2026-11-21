@@ -72,5 +72,28 @@ test('every answer is its source’s own words at its offsets (C6)', () => {
 
 test('nothing in the record was typed: the claims come from the measurement', () => {
   for (const [k, c] of Object.entries(published.claims)) assert.equal(typeof c.pass, 'boolean', k);
-  assert.deepEqual(Object.keys(published.claims), ['C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7']);
+  assert.deepEqual(Object.keys(published.claims), ['C1', 'C2', 'C3', 'C4', 'C5', 'C6', 'C7', 'C7b']);
+});
+
+test('C7 stays exactly as first published; C7b is a new claim beside it, never a relabel (PREREG §7)', () => {
+  assert.deepEqual(published.claims.C7, { claim: 'Gets better with use', pass: false,
+    detail: { warmAccuracy: 0.6762, coldAccuracy: 0.681, falseServeRate: 0.0345, readerCallsSaved: 37, staleServed: 0, staleCaught: 8, threshold: 0.966989 } });
+  assert.deepEqual(rec.claims.C7b.detail, published.claims.C7b.detail);
+  assert.equal(rec.claims.C7b.pass, published.claims.C7b.pass);
+  assert.equal(published.s5b.servedSpans.audited, published.s5b.servedSpans.verbatim, 'every served span is its source’s own words at its offsets');
+  assert.equal(published.s5b.eval, 420);
+  assert.deepEqual(rec.needs, [], 'the re-check made no reader call the shipped data does not hold');
+});
+
+test('the C7b re-check is retrieval’s own arithmetic: on every eval paraphrase it gives the shipped score and evidence', () => {
+  let n = 0;
+  for (const q of F.s1.questions.slice(Math.floor(F.s1.questions.length * 0.3))) {
+    const sh = shipped.para[q.qid];
+    for (const [pid, score] of sh.col.slice(0, 3)) {
+      const m = A.D.s5.match(q.qid, pid); n++;
+      assert.equal(m.score, score, q.qid + ' ' + pid);
+      assert.deepEqual({ weakest: m.weakest, weakestToken: m.weakestToken }, sh.ev[pid], q.qid + ' ' + pid);
+    }
+  }
+  assert.equal(n, 420 * 3);
 });

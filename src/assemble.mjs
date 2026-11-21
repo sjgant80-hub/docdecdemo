@@ -65,6 +65,17 @@ export function paraScores(questions, docs, colPara, colD) {
   return out;
 }
 
+// matchOne(colQ, colD) → { score, weakest, weakestToken }: ONE question against ONE passage, the arithmetic scoreSet and
+// paraScores do for every passage, rounded the same way. The memory's re-check (claim C7b) runs on one passage instead
+// of all of them, so what it computes there is exactly what retrieval computed there. null when either side is missing.
+export function matchOne(colQ, colD) {
+  if (!colQ || !colD) return null;
+  const q = col(colQ), d = col(colD);
+  const m = L.maxsim(q.m, d.m, DIM);
+  const e = L.evidence(q.tokens, m.sims, m.best, d.tokens);
+  return { score: r6(m.score), weakest: r6(e.weakest), weakestToken: e.weakestToken };
+}
+
 // assemble(F) → D for measure(). F: the parsed shipped files { s1, s2, s3, s4, s5, h1, reader, v1 }.
 // opts.s1Scores: pass the shipped S1 score table to skip re-scoring (the page's quick re-run); CI always re-scores.
 export function assemble(F, opts) {
@@ -90,6 +101,14 @@ export function assemble(F, opts) {
     D.s5 = { paraphrases: F.s5.paraphrases,
       qq: o.qq || qqScores(s1.questions, F.s5.col.para, F.s5.col.orig),
       paraScores: o.paraScores || paraScores(s1.questions.slice(Math.floor(s1.questions.length * 0.3)), s1.paragraphs, F.s5.col.para, s1.col.docs) };
+    // the re-check: a paraphrase against one version of a source (an S1 paragraph, or its S4 later version), worked out
+    // from the shipped token vectors on first use and kept, since the same pair is asked before and after the changes
+    const versions = { ...s1.col.docs, ...F.s4.col }, once = new Map();
+    D.s5.match = (qid, versionId) => {
+      const k = qid + '|' + versionId;
+      if (!once.has(k)) once.set(k, matchOne(F.s5.col.para['para:' + qid], versions[versionId]));
+      return once.get(k);
+    };
   }
   if (F.h1) {
     D.h1 = { nodes: F.h1.nodes.map((n) => ({ ...n, v: { cosN: b64ToInt16(n.N), cosP: b64ToInt16(n.P) } })),
@@ -98,4 +117,4 @@ export function assemble(F, opts) {
   return { D, s1Scores, oosScores, s4Scores, qq: D.s5 ? D.s5.qq : null, paraScores: D.s5 ? D.s5.paraScores : null };
 }
 
-export default { b64ToInt16, scoreSet, qqScores, paraScores, assemble };
+export default { b64ToInt16, scoreSet, qqScores, paraScores, matchOne, assemble };

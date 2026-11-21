@@ -1038,6 +1038,51 @@
    "pruned": 0
   }
  },
+ "s5b": {
+  "kept": 230,
+  "matchBar": 0.966989,
+  "eval": 420,
+  "unanswerable": 203,
+  "tried": 37,
+  "served": 34,
+  "falseServes": 5,
+  "warmRight": 285,
+  "coldRight": 286,
+  "readerCallsSaved": 34,
+  "stoppedBy": {
+   "2": 0,
+   "3": 3,
+   "4": 0,
+   "5": 0,
+   "offsets": 0,
+   "other": 0
+  },
+  "passagesScored": {
+   "withMemory": 50217,
+   "without": 54600
+  },
+  "matchedAgainstPerQuestion": 230,
+  "servedSpans": {
+   "answerable": 29,
+   "exactMatch": 21,
+   "coldExactMatchOnSame": 16,
+   "audited": 34,
+   "verbatim": 34
+  },
+  "afterChanges": {
+   "served": 3,
+   "staleServed": 0,
+   "staleCaught": 34
+  },
+  "lostWhereColdWasRight": {
+   "1": 0,
+   "2": 0,
+   "3": 0,
+   "4": 2,
+   "5": 0,
+   "answered": 0
+  }
+ },
  "h1": {
   "nodes": {
    "article": 3,
@@ -1225,6 +1270,28 @@
     "staleServed": 0,
     "staleCaught": 8,
     "threshold": 0.966989
+   }
+  },
+  "C7b": {
+   "claim": "Gets better with use, by reusing its own work and re-checking it for each new question",
+   "pass": false,
+   "detail": {
+    "warmAccuracy": 0.6786,
+    "coldAccuracy": 0.681,
+    "falseServeRate": 0.0246,
+    "served": 34,
+    "staleServed": 0,
+    "staleCaught": 34,
+    "matchBar": 0.966989,
+    "readerCallsSaved": 34,
+    "test": {
+     "n": 420,
+     "a": 285,
+     "b": 286,
+     "aOnly": 1,
+     "bOnly": 2,
+     "p": 1
+    }
    }
   }
  },

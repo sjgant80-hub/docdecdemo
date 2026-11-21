@@ -58,15 +58,15 @@
    "clean": true
   },
   "src/measure.mjs": {
-   "total": 129,
-   "killed": 129,
+   "total": 149,
+   "killed": 149,
    "survived": 0,
    "ignored": 0,
    "clean": true
   },
   "src/assemble.mjs": {
-   "total": 11,
-   "killed": 11,
+   "total": 12,
+   "killed": 12,
    "survived": 0,
    "ignored": 0,
    "clean": true
