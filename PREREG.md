@@ -154,3 +154,38 @@ against every remembered question, served or not).
 `src/measure.mjs` (the one v2 measurement). Published in `data/v2/record.json` under `claims.C7b` and `s5b`, re-derived
 from the shipped data on every push by `test/record.test.mjs` and in a visitor's browser by the page's re-run button.
 `rerun.mjs` and `rerun.test.mjs` are version one's measurement path and stay as published.
+
+## 8 · Addendum 2, 2026-11-21: G1, a memo of retrieval scores
+
+Written and pushed **before** any G1 number was computed; the commit that adds this section is its seal. G1 is a
+measurement of speed with its own pass rule. It changes no other claim and no other number.
+
+**What.** `src/foldcache.mjs` keeps the retrieval scores of a question (late interaction over every passage, ranked,
+the evidence for the top three, and both cosines: exactly what `src/assemble.mjs` computes for a question) so that the
+SAME question asked again on the SAME index is not scored again.
+
+- **Key:** the question, lower-cased, runs of whitespace as one space, trimmed (the ColBERT tokenizer is uncased and
+  splits on whitespace, so equal keys mean equal encodings), together with the index version: the exact sorted list of
+  the passage-version ids in the index (kept whole, not hashed, so two different indexes can never share a version).
+- **Eviction:** keeping anything under a new index version first drops every entry kept under the old one (none of them
+  could ever be used again); beyond the capacity, the least recently used entry goes.
+- A reworded question has a different key, so this memo never answers it. That is the memory's job (claims C7, C7b).
+
+**The bench (`bench/foldcache.mjs`, shipped data only, on this laptop).** The 420 eval questions of S1 (no two share a
+key) against the 130 S1 passages (index A), the passages decoded once before timing, as a running index is held in
+memory. Three rounds, each with an empty memo of capacity 1,000: every question is asked once (cold: the memo misses and
+the scores are computed) and then once more (warm: the memo answers). The time of each memo call, computation included
+when it misses, by `performance.now()`. Then the S4 changes land (index B: the 86 changed passages replaced by their
+later versions) and every question is asked again under B's version, once.
+
+**G1 passes only if:**
+
+- (a) every cold result equals the shipped score table (`data/v2/scores-s1.json`) for that question, field for field,
+  and every warm result is the result its cold call kept;
+- (b) under index B, none of the 420 is answered from the memo, and every result equals a fresh computation on index B;
+- (c) the median warm time per question is at most one tenth of the median cold time.
+
+**Reported, not part of the rule:** both medians and 90th percentiles, hits, misses and evictions, the machine, its free
+memory, and what else was running. **Not counted in either time:** encoding the question with the model (in the speed
+table; a hit skips that too, so on a repeat the real saving is larger than G1 shows) and the reader. Timings are machine
+measurements: published as measured, never re-derived; CI re-checks (a) and (b) on a sample of the shipped questions.
