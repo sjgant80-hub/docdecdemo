@@ -18,6 +18,7 @@ export const MODULES = {
   'src/assemble.mjs': ['test/mini.test.mjs'], 'src/publish.mjs': ['test/mini.test.mjs'], 'src/examples.mjs': ['test/mini.test.mjs'],
   'src/wordpiece.mjs': ['test/wordpiece.test.mjs'], 'src/foldcache.mjs': ['test/foldcache.test.mjs'],
   'src/mmsets.mjs': ['test/mmsets.test.mjs'], 'src/mmscore.mjs': ['test/mmscore.test.mjs'],
+  'src/mmtrain.mjs': ['test/mmtrain.test.mjs'], 'src/interrogate.mjs': ['test/interrogate.test.mjs'],
   'genome/cell.mjs': ['test/genome.test.mjs'], 'genome/lane-share.mjs': ['test/genome.test.mjs'],
 };
 const out = { witness: 'v0.6', files: {} };

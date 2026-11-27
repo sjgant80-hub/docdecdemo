@@ -126,6 +126,20 @@
    "survived": 0,
    "ignored": 0,
    "clean": true
+  },
+  "src/mmtrain.mjs": {
+   "total": 27,
+   "killed": 27,
+   "survived": 0,
+   "ignored": 0,
+   "clean": true
+  },
+  "src/interrogate.mjs": {
+   "total": 27,
+   "killed": 27,
+   "survived": 0,
+   "ignored": 0,
+   "clean": true
   }
  }
 }
