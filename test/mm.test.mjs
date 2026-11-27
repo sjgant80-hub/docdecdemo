@@ -51,3 +51,26 @@ test('the pre-registration states the sets as they are shipped', () => {
   // the refusal phrase, as an answer is read
   assert.equal(S.norm('not in the documents'), 'not in documents');
 });
+
+test('the model\'s hands are The Distillation\'s, byte for byte, as their provenance says', async () => {
+  const { createHash } = await import('node:crypto');
+  const prov = JSON.parse(read('bench/mm/py/PROVENANCE.json'));
+  assert.equal(prov.repo, 'sjgant80-hub/the-distillation'); assert.match(prov.commit, /^[0-9a-f]{40}$/);
+  assert.deepEqual(Object.keys(prov.files).sort(), ['llm.py', 'serve.py', 'train.py']);
+  for (const [f, h] of Object.entries(prov.files)) {
+    const b = readFileSync(new URL('../bench/mm/py/' + f, import.meta.url));
+    assert.ok(!b.includes(13), `${f} holds a carriage return`);
+    assert.equal(createHash('sha256').update(b).digest('hex'), h, `${f} is not the file its provenance names`);
+  }
+});
+
+test('the generator\'s lines are read strictly: "Q: … | A: …", and nothing else', async () => {
+  const { parsePairs, PROMPT_FACTS, PROMPT_TITLE, PROMPT_TWO, PROMPT_RAG, PROMPT_CLOSED, MEMORY_SYSTEM } = await import('../bench/mm/prompts.mjs');
+  assert.deepEqual(parsePairs('Here are the pairs:\nQ: Who directed Ed Wood? | A: Tim Burton\n1. Q: When? | A: "1994"\n- Q: Where?|A:  Hollywood \nQ: no answer here\nA: stray\nQ:  | A: x\nQ: y | A: '), [{ question: 'Who directed Ed Wood?', answer: 'Tim Burton' }, { question: 'When?', answer: '1994' }, { question: 'Where?', answer: 'Hollywood' }]);
+  for (const x of ['', null, undefined, 7]) assert.deepEqual(parsePairs(x), []);
+  // no prompt of the generator can hold a test question: each is built from a paragraph alone
+  const p = { title: 'T', text: 'Some text.' };
+  for (const prompt of [PROMPT_FACTS(p), PROMPT_TITLE(p), PROMPT_TWO(p, p)]) { assert.ok(prompt.includes('Some text.')); assert.ok(!/Question:/.test(prompt)); }
+  // every prompt that may refuse names the one refusal phrase the reading rule knows
+  for (const text of [PROMPT_RAG([p], 'Q?'), PROMPT_CLOSED('Q?'), MEMORY_SYSTEM]) assert.ok(text.includes('not in the documents'));
+});

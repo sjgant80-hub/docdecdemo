@@ -1,0 +1,11 @@
+{
+ "v": "docdec-mm-vendor/1",
+ "note": "the model's hands, byte for byte from The Distillation: loading and greedy generation (llm.py), LoRA training with the loss on the reply only (train.py), and the local door on 127.0.0.1 (serve.py). They decide nothing; every answer is read by src/mmscore.mjs.",
+ "repo": "sjgant80-hub/the-distillation",
+ "commit": "a618325480a44523a5426dae69eab6fae0a2eeb1",
+ "files": {
+  "llm.py": "4ab94c659b7e3954b54770be25c02caea1ca2b15d9b433c7ab5214e07993da85",
+  "train.py": "2215d3a29959555d44a58585be9259dd6ea40d7b7afc4b70f00106b602449f9b",
+  "serve.py": "e282a554f1c8eca086db1650239692f02c9b23433624e65752e82769f3ed497b"
+ }
+}
