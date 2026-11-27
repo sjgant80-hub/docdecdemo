@@ -112,6 +112,20 @@
    "survived": 0,
    "ignored": 0,
    "clean": true
+  },
+  "src/mmsets.mjs": {
+   "total": 74,
+   "killed": 74,
+   "survived": 0,
+   "ignored": 0,
+   "clean": true
+  },
+  "src/mmscore.mjs": {
+   "total": 57,
+   "killed": 57,
+   "survived": 0,
+   "ignored": 0,
+   "clean": true
   }
  }
 }

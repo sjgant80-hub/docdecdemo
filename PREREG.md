@@ -189,3 +189,147 @@ later versions) and every question is asked again under B's version, once.
 memory, and what else was running. **Not counted in either time:** encoding the question with the model (in the speed
 table; a hit skips that too, so on a repeat the real saving is larger than G1 shows) and the reader. Timings are machine
 measurements: published as measured, never re-derived; CI re-checks (a) and (b) on a sample of the shipped questions.
+
+## 9 · Addendum 3, 2026-11-27: the Memory Model, a trained memory beside the retriever
+
+Written and pushed **before** any model was shown a paragraph or a question of the sealed set below. The commit that
+adds this section seals the claims, their bars and the way an answer is read ("bars first"). The few settings a small
+dev round must decide (9.8) are frozen in a second commit, before the sealed run starts. Sections 0 to 8 do not change.
+
+### 9.0 · What is being tested, and whose numbers are whose
+
+The idea is from **"MeMo: Memory as a Model"** (Quek, Lee, Leong, Verma, Prakash, Chen, Low, Rus, Solar-Lezama;
+arXiv:2605.15156, May 2026). Instead of retrieving passages, one small **memory model** is trained on the corpus, so
+the knowledge is in its weights. A frozen larger model (the **executive**) puts a few questions to it and writes the
+answer. The paper reports, on its own benchmarks with its own models:
+
+- NarrativeQA: 53.58% against 23.21% for the best retrieval baseline, with Gemini 3 Flash as the executive
+  (26.85% against 21.39% with Qwen2.5-32B);
+- retrieval losing about 6 points when the corpus is doubled with distractors, the memory staying within noise;
+- +26.73 points on NarrativeQA when the executive is swapped, with no retraining of the memory.
+
+**Those numbers are theirs.** Nothing here repeats them as ours. What is tested here is whether the same shape
+reproduces against DocDec's own baseline, on this machine.
+
+**It is the same shape at a very different scale.** Their memory is a 14-billion-parameter model, fully fine-tuned on
+about 1.3 million generated question-and-answer pairs, with hundreds of GPU-hours. Ours is a 1-billion-parameter model
+with a small trained adapter, on a laptop processor, trained on a few thousand pairs. A result here says whether a
+memory this small earns a place beside DocDec on a corpus this small. It neither confirms nor refutes the paper at its
+own scale.
+
+### 9.1 · Sets (by rule: `src/mmsets.mjs`, `bench/mm/build-sets.mjs`, shipped as `data/v3/sets.json`)
+
+From the same SHA-pinned HotpotQA file as S3, in file order, from rows DocDec v2 never touched (v2 used rows 0 to 499).
+Every question is multi-hop: its answer needs two paragraphs. File order and the rule decide everything; no row was
+skipped.
+
+| Set | Rows from | Answerable | Unanswerable | Foreign | Corpus | Noise |
+|---|---|---|---|---|---|---|
+| dev (never a claim) | 500 | 30 | 10 | 10 | 60 paragraphs, 4,006 words | 60 paragraphs |
+| **sealed** | 600 | 120 (100 bridge, 20 comparison; 5 answered yes or no) | 60 | 60 | 240 paragraphs, 17,074 words | 240 paragraphs, 23,714 words |
+
+- **Answerable:** both of the question's source paragraphs are in the corpus.
+- **Unanswerable:** neither source paragraph is in the corpus or in the noise. The right reply is a refusal.
+- **Foreign:** further questions whose sources are kept wholly outside. They are never tested. Their paragraphs are
+  used only to make training examples of refusing (9.3).
+- **Noise:** for each answerable question, its first two annotated distractor paragraphs, until the noise is as large
+  as the corpus. The **doubled corpus** is corpus plus noise: 480 paragraphs, 40,788 words.
+- No question and no paragraph is shared between the dev set and the sealed set.
+
+### 9.2 · Systems (all on this machine; no network beyond 127.0.0.1; every model greedy, fixed seed)
+
+- **MM, the Memory Model system.** The memory is Llama 3.2 1B Instruct with a LoRA adapter trained on the corpus
+  (9.3). The executive is qwen2.5:7b. A conductor (`src/interrogate.mjs`, written and mutation-gated before the sealed
+  run) lets the executive put **at most 3** questions to the memory. The memory answers each one alone: no passage, no
+  earlier turn, nothing but the question. Then the executive must give its final answer. Every turn is logged.
+- **MM-edge.** The same memory weights, with llama3.2:1b as the executive. Used for K3 only.
+- **RAG, the plain baseline.** nomic-embed-text cosine, the top 5 paragraphs, handed to the same executive
+  (qwen2.5:7b) with a frozen prompt that allows the refusal phrase.
+- **DocDec v2,** exactly as sealed in sections 0 to 6: late interaction and the graph walk with the settings chosen
+  on S3's tune split carried over unchanged, then the verifier-gated reader (it copies a phrase from the passages, or
+  refuses). Its answer is the copied phrase.
+
+Each system is run on the corpus and on the doubled corpus. For the doubled corpus the memory is trained again from
+the start on all 480 paragraphs (its knowledge is its weights); RAG and DocDec v2 are re-indexed.
+
+### 9.3 · How the memory is trained: only from paragraphs, never from a test question
+
+1. **Generate.** The generator (qwen2.5:7b, frozen prompts) reads one corpus paragraph at a time and writes
+   question-and-answer pairs: facts the paragraph states, and questions whose answer is the paragraph's own subject
+   (its title). For pairs of paragraphs where one names the other's title (the corpus's own links, by
+   `src/graph.mjs`'s mention rule, never by looking at a test question) it writes questions that need both.
+2. **Ground.** Code decides what may be trained on. A pair is kept only if its answer is found word for word in its
+   source paragraph or paragraphs, or is the source's title, or is yes or no for a two-paragraph comparison; its
+   question does not point at "the passage", "the paragraph" or "the text"; the question is at most 40 words and the
+   answer at most 12; and it is not a repeat. Everything dropped is counted, with its reason.
+3. **Refusals are trained, not bolted on.** The same generation is run over the foreign paragraphs. Their questions
+   become training examples whose answer is exactly `not in the documents`: one for every three grounded pairs, the
+   first in order.
+4. **The integrity guard.** Code strikes, and counts, any training question that after normalising equals a test
+   question (answerable or unanswerable, dev or sealed), or shares at least 80% of its distinct words with one. The
+   generator's inputs are recorded; none holds a test question.
+5. **Train.** LoRA on the frozen 1B model, with the loss on the answer only. Rank, epochs, learning rate and token
+   limits are set by the dev round and frozen before the sealed run (9.8).
+
+### 9.4 · How an answer is read (code, exact; no model judges anything)
+
+- The **final answer** is the first line a system gives, cut at 20 words.
+- It is a **refusal** if it is empty, or if, normalised (`norm` in `src/mmsets.mjs`), it contains `not in documents`
+  (the phrase `not in the documents`, as normalised), or if DocDec's reader refused.
+- **Answerable question.** *Right:* not a refusal, and the gold answer's words appear in it, in order, as whole words
+  (for a yes or no gold answer: its first word is that word). *Wrong:* an answer that is not right, which is a
+  confident wrong answer. *No answer:* a refusal.
+- **Unanswerable question.** *Right:* a refusal. *Wrong:* any answer.
+- Accuracy is right over all, on the named set. Paired comparisons are the exact two-sided McNemar test
+  (`src/stats.mjs`).
+
+### 9.5 · Claims and their pass rules (the sealed set; the executive is qwen2.5:7b unless it says otherwise)
+
+| # | Claim | Passes only if |
+|---|---|---|
+| K1 | Long-document lift | on the 120 answerable questions with the corpus: MM's accuracy is at least **5 points** above the better of DocDec v2 and RAG (DocDec v2 when they tie), and exact McNemar against that better baseline gives p < 0.05 |
+| K2 | Noise robustness | a system's drop is its accuracy on the 120 with the corpus minus with the doubled corpus. MM's drop is at least **3 points smaller** than RAG's. DocDec v2's drop is reported beside them |
+| K3 | Executive swap | the same memory weights (the same adapter SHA-256), the corpus, the 120: accuracy with qwen2.5:7b as the executive is not below accuracy with llama3.2:1b |
+| K4 | Honest boundary | on the 60 unanswerable questions with the corpus: MM gives no more confident wrong answers than RAG. DocDec v2's count is reported beside them: it is the stricter comparison |
+| K5 | Held-out integrity | 0 test questions are in either training file by the guard's two rules; 0 paragraphs kept outside are in either corpus; the generator was shown no test question. Re-checked from the shipped files in CI |
+
+**The rule: adopt or dissolve.** The memory path is adopted into DocDec only if **all five** pass. Otherwise it
+dissolves: its weights are not used, DocDec stays as it is, and the result is published with the failed claims in red.
+An adopted memory is a new trained model. It would ship only after a person's recorded yes: the run proposes, a person
+decides.
+
+**Reported, never a claim:** every system's right, wrong and no-answer counts on both sets and both corpora; MM by
+question type; how many of its 3 questions the executive used; how often the memory answered a sub-question with
+`not in the documents`; the median seconds per question for each system; the hours of generating and training (the
+cost retrieval does not pay); and the dev round.
+
+### 9.6 · The spend wall
+
+Model work on the sealed run is capped: 8 hours generating, 10 hours for each of the two trainings, 14 hours
+answering, and 40 hours in all. If a cap is reached the run stops and what was measured is published as measured. A
+claim whose runs did not finish is shown as not measured, and the memory dissolves (adoption needs all five to pass).
+
+### 9.7 · Honest limits fixed in advance
+
+- One corpus (240 Wikipedia paragraphs, 17,074 words), one kind of question, one memory size, one machine. K1 is
+  named for the paper's long-document claim; this corpus is not a book, and each question needs two paragraphs of it.
+- An unanswerable question is one whose two annotated sources are outside the corpus. A few may still be answerable
+  from other paragraphs. Every system sees the same corpus, so this favours none.
+- An answer is read as right when it contains the gold answer. A long answer could contain it by luck; the same rule
+  and the same 20-word cut apply to every system.
+- With 120 questions, a difference under about 9 points can be chance. K1 therefore also needs p < 0.05. K2, K3 and
+  K4 compare small counts by the plain rules above; the exact counts are published with them.
+- Training cost against query cost: the memory pays hours of training once for a corpus, and again when the corpus
+  changes. Retrieval pays nothing up front. A corpus that changes hourly keeps retrieval, whatever this run says.
+- Grounded, not proven: the memory answers from its weights, not from a cited passage. Even if adopted, its answers
+  are labelled as recalled, and DocDec's word-for-word citation is still the only path that shows its source.
+
+### 9.8 · Order of work
+
+1. This section: the claims and bars, before anything is run.
+2. A dev round on the dev set. It is published and it is never a claim. It fixes the prompts, the token limits and
+   the training settings. Its memory is used nowhere else.
+3. A second commit freezes those settings and every file that can change a result (`data/v3/seal.json`, a SHA-256 of
+   each), before the sealed generation starts.
+4. The sealed run: generate, ground, guard, train twice, answer, under the spend wall.
+5. The verdicts, worked out by code from the shipped records. CI re-derives every published number.

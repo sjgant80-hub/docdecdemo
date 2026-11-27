@@ -14,6 +14,15 @@ When claim C7 (gets better with use) failed, a second memory design was pre-regi
 section 7: keep the work behind each answer and re-run the gate's checks for each new question before serving), and
 measured the same way. C7 stays failed exactly as published; C7b's verdict is on the page beside it.
 
+## Next, pre-registered and not yet run: the Memory Model
+
+A different way to hold a corpus: train one small model on it, so the knowledge is in its weights, and let a larger
+frozen model put a few questions to it. The idea is from "MeMo: Memory as a Model" (arXiv:2605.15156); its numbers are
+its authors'. Here it is tested at laptop scale against DocDec v2 and plain retrieval, on questions neither has seen.
+The five claims, their pass marks, the test sets and the way an answer is read were written down first:
+[PREREG.md, section 9](PREREG.md#9--addendum-3-2026-11-27-the-memory-model-a-trained-memory-beside-the-retriever).
+It is adopted only if all five pass. Otherwise it dissolves, and that is published too. **No result exists yet.**
+
 ## The five layers
 
 | Layer | File | What it does |
